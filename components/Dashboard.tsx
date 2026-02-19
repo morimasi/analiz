@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { User, Student, ScreeningResult, Message } from '../types';
 import { api } from '../services/db';
-import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart } from 'lucide-react';
+import ArchiveView from './ArchiveView';
+import AnalyticsView from './AnalyticsView';
+import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -10,7 +12,7 @@ interface DashboardProps {
   onViewReport: (report: ScreeningResult, student: Student) => void;
 }
 
-type Tab = 'overview' | 'students' | 'messages' | 'admin_stats';
+type Tab = 'overview' | 'students' | 'messages' | 'archive' | 'analytics';
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening, onViewReport }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -98,6 +100,25 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
     loadData();
   };
 
+  const handleArchiveReportView = (report: ScreeningResult) => {
+    const student = students.find(s => s.id === report.studentId);
+    // Öğrenci bulunamazsa (örn silinmişse) geçici bir obje oluşturabiliriz veya hata verebiliriz.
+    // Şimdilik, arşivden bakıldığında öğrenci nesnesi zorunlu olmasın diye onViewReport'u biraz esnetmek gerekebilir
+    // ama en temiz yol studentId ile öğrenciyi bulmaktır.
+    if(student) {
+        onViewReport(report, student);
+    } else {
+        // Fallback for demo or deleted students
+        const mockStudent: Student = { 
+            id: report.studentId || 'unknown', 
+            name: (report as any).studentName || 'Bilinmeyen Öğrenci', 
+            age: 0, 
+            grade: '?' 
+        };
+        onViewReport(report, mockStudent);
+    }
+  };
+
   const getRiskColor = (score: number) => {
     if (score >= 65) return 'text-red-600 bg-red-50 border-red-100';
     if (score >= 35) return 'text-orange-600 bg-orange-50 border-orange-100';
@@ -140,7 +161,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
           <div className="flex items-center gap-4">
              {/* Desktop Nav */}
              <nav className="hidden md:flex bg-gray-100 p-1 rounded-lg">
-                <button onClick={() => setActiveTab('overview')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${activeTab === 'overview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Genel Bakış</button>
+                <button 
+                  onClick={() => setActiveTab('overview')} 
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${activeTab === 'overview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Genel Bakış
+                </button>
+                <button 
+                  onClick={() => setActiveTab('archive')} 
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <FolderOpen className="w-4 h-4"/> Arşiv
+                </button>
+                <button 
+                  onClick={() => setActiveTab('analytics')} 
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'analytics' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <BarChart2 className="w-4 h-4"/> Analizler
+                </button>
                 {user.role !== 'admin' && (
                   <button onClick={() => setActiveTab('messages')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'messages' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
                     Mesajlar
@@ -173,11 +211,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
-        {/* MESSAGES TAB */}
+        {/* === TAB: MESSAGES === */}
         {activeTab === 'messages' && user.role !== 'admin' && (
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px]">
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px] animate-fade-in">
               {/* Inbox List */}
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col">
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col shadow-sm">
                  <div className="p-4 border-b border-gray-100 bg-gray-50">
                     <h3 className="font-bold text-gray-800">Gelen Kutusu</h3>
                  </div>
@@ -199,7 +237,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
               </div>
 
               {/* Compose */}
-              <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 flex flex-col">
+              <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 flex flex-col shadow-sm">
                  <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <Send className="w-4 h-4 text-indigo-600" /> Yeni Mesaj Gönder
                  </h3>
@@ -217,7 +255,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                        <button 
                          onClick={handleSendMessage}
                          disabled={!newMessage.content}
-                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                        >
                          Gönder <Send className="w-4 h-4" />
                        </button>
@@ -227,206 +265,222 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
            </div>
         )}
 
-        {/* OVERVIEW TAB */}
-        {activeTab === 'overview' && (
-        <>
-        {/* Welcome Section */}
-        <div className={`rounded-2xl p-8 text-white shadow-xl relative overflow-hidden animate-fade-in ${user.role === 'admin' ? 'bg-gradient-to-r from-slate-800 to-slate-900' : 'bg-gradient-to-r from-indigo-600 to-purple-700'}`}>
-          <div className="relative z-10">
-            <h2 className="text-3xl font-bold mb-2">Merhaba, {user.name} 👋</h2>
-            <p className={`${user.role === 'admin' ? 'text-slate-300' : 'text-indigo-100'} max-w-xl text-lg`}>
-              {user.role === 'parent' 
-                ? 'Çocuğunuzun bilişsel gelişimini takip etmek ve desteklemek için doğru yerdesiniz.' 
-                : user.role === 'admin' 
-                  ? 'Sistem genelindeki tarama verileri ve kullanıcı istatistikleri aşağıdadır.'
-                  : 'Sınıfınızdaki öğrencilerin gelişim risklerini erken tespit edip aksiyon alın.'}
-            </p>
-          </div>
-          <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
-            <BrainPattern />
-          </div>
-        </div>
-
-        {/* Admin Stats Cards */}
-        {user.role === 'admin' && (
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                <div className="bg-blue-100 p-3 rounded-xl text-blue-600"><UserIcon className="w-6 h-6"/></div>
-                <div>
-                   <p className="text-gray-500 text-sm">Toplam Öğrenci</p>
-                   <h3 className="text-2xl font-bold text-gray-800">{totalStudents}</h3>
-                </div>
-             </div>
-             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                <div className="bg-green-100 p-3 rounded-xl text-green-600"><FileText className="w-6 h-6"/></div>
-                <div>
-                   <p className="text-gray-500 text-sm">Tamamlanan Tarama</p>
-                   <h3 className="text-2xl font-bold text-gray-800">{totalScreenings}</h3>
-                </div>
-             </div>
-             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                <div className="bg-red-100 p-3 rounded-xl text-red-600"><AlertCircle className="w-6 h-6"/></div>
-                <div>
-                   <p className="text-gray-500 text-sm">Yüksek Riskli</p>
-                   <h3 className="text-2xl font-bold text-gray-800">{highRiskCount}</h3>
-                </div>
-             </div>
-           </div>
+        {/* === TAB: ARCHIVE === */}
+        {activeTab === 'archive' && (
+          <ArchiveView reports={recentReports} onViewReport={handleArchiveReportView} userRole={user.role} />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Left Column: Students List */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <UserIcon className="w-5 h-5 text-indigo-600" />
-                {user.role === 'parent' ? 'Çocuklarım' : 'Öğrenci Listesi'}
-              </h3>
-              <button 
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition shadow-lg shadow-indigo-200 active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                {user.role === 'parent' ? 'Çocuk Ekle' : 'Öğrenci Ekle'}
-              </button>
-            </div>
+        {/* === TAB: ANALYTICS === */}
+        {activeTab === 'analytics' && (
+          <AnalyticsView reports={recentReports} userRole={user.role} />
+        )}
 
-            {students.length === 0 ? (
-              <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <UserIcon className="w-8 h-8 text-gray-300" />
-                </div>
-                <h4 className="text-lg font-medium text-gray-900 mb-2">Henüz kayıt yok</h4>
-                <p className="text-gray-500 mb-6">Analiz yapmaya başlamak için önce profil ekleyin.</p>
-                <button 
-                  onClick={() => setShowAddModal(true)}
-                  className="text-indigo-600 font-semibold hover:text-indigo-800"
-                >
-                  + Yeni Kayıt Ekle
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {students.map(student => (
-                  <div key={student.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition group relative">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
-                          {student.name.charAt(0)}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-gray-900">{student.name}</h4>
-                          <p className="text-xs text-gray-500">{student.grade}. Sınıf • {student.age} Yaş</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => handleDeleteStudent(student.id)}
-                        className="text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    
-                    {user.role !== 'admin' && (
-                      <div className="flex gap-2">
-                         <button 
-                          onClick={() => onStartScreening(student)}
-                          className="flex-1 py-2.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-lg font-medium text-xs transition flex items-center justify-center gap-2 border border-gray-200 hover:border-indigo-200"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          Tarama Yap
-                        </button>
-                        
-                        <button 
-                           onClick={() => setActiveTab('messages')}
-                           className="px-3 py-2.5 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 text-gray-600 rounded-lg border border-gray-200 transition"
-                        >
-                           <Mail className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                    
-                    {user.role === 'admin' && (
-                       <div className="bg-gray-50 p-2 rounded text-xs text-gray-500 flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3" /> Yönetici Görünümü
-                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* === TAB: OVERVIEW === */}
+        {activeTab === 'overview' && (
+        <div className="space-y-8">
+          {/* Welcome Section */}
+          <div className={`rounded-2xl p-8 text-white shadow-xl relative overflow-hidden animate-fade-in ${user.role === 'admin' ? 'bg-gradient-to-r from-slate-800 to-slate-900' : 'bg-gradient-to-r from-indigo-600 to-purple-700'}`}>
+            <div className="relative z-10">
+              <h2 className="text-3xl font-bold mb-2">Merhaba, {user.name} 👋</h2>
+              <p className={`${user.role === 'admin' ? 'text-slate-300' : 'text-indigo-100'} max-w-xl text-lg`}>
+                {user.role === 'parent' 
+                  ? 'Çocuğunuzun bilişsel gelişimini takip etmek ve desteklemek için doğru yerdesiniz.' 
+                  : user.role === 'admin' 
+                    ? 'Sistem genelindeki tarama verileri ve kullanıcı istatistikleri aşağıdadır.'
+                    : 'Sınıfınızdaki öğrencilerin gelişim risklerini erken tespit edip aksiyon alın.'}
+              </p>
+            </div>
+            <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
+              <BrainPattern />
+            </div>
           </div>
 
-          {/* Right Column: Recent Activity / Reports */}
-          <div className="space-y-6">
-            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-600" />
-              {user.role === 'admin' ? 'Tüm Sistem Raporları' : 'Son Raporlar'}
-            </h3>
+          {/* Admin Stats Cards */}
+          {user.role === 'admin' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                  <div className="bg-blue-100 p-3 rounded-xl text-blue-600"><UserIcon className="w-6 h-6"/></div>
+                  <div>
+                    <p className="text-gray-500 text-sm">Toplam Öğrenci</p>
+                    <h3 className="text-2xl font-bold text-gray-800">{totalStudents}</h3>
+                  </div>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                  <div className="bg-green-100 p-3 rounded-xl text-green-600"><FileText className="w-6 h-6"/></div>
+                  <div>
+                    <p className="text-gray-500 text-sm">Tamamlanan Tarama</p>
+                    <h3 className="text-2xl font-bold text-gray-800">{totalScreenings}</h3>
+                  </div>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                  <div className="bg-red-100 p-3 rounded-xl text-red-600"><AlertCircle className="w-6 h-6"/></div>
+                  <div>
+                    <p className="text-gray-500 text-sm">Yüksek Riskli</p>
+                    <h3 className="text-2xl font-bold text-gray-800">{highRiskCount}</h3>
+                  </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              {recentReports.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-sm">
-                  Henüz tamamlanmış bir tarama yok.
+            {/* Left Column: Students List */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <UserIcon className="w-5 h-5 text-indigo-600" />
+                  {user.role === 'parent' ? 'Çocuklarım' : 'Öğrenci Listesi'}
+                </h3>
+                <button 
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition shadow-lg shadow-indigo-200 active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  {user.role === 'parent' ? 'Çocuk Ekle' : 'Öğrenci Ekle'}
+                </button>
+              </div>
+
+              {students.length === 0 ? (
+                <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <UserIcon className="w-8 h-8 text-gray-300" />
+                  </div>
+                  <h4 className="text-lg font-medium text-gray-900 mb-2">Henüz kayıt yok</h4>
+                  <p className="text-gray-500 mb-6">Analiz yapmaya başlamak için önce profil ekleyin.</p>
+                  <button 
+                    onClick={() => setShowAddModal(true)}
+                    className="text-indigo-600 font-semibold hover:text-indigo-800"
+                  >
+                    + Yeni Kayıt Ekle
+                  </button>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-50">
-                  {recentReports.map((report) => (
-                    <div 
-                      key={report.id} 
-                      onClick={() => {
-                        const student = students.find(s => s.id === report.studentId);
-                        if(student) onViewReport(report, student);
-                      }}
-                      className="p-4 hover:bg-gray-50 cursor-pointer transition flex items-center justify-between group"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-gray-700 text-sm">{report.studentName}</span>
-                          <span className="text-[10px] text-gray-400">
-                            {new Date(report.date).toLocaleDateString('tr-TR')}
-                          </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {students.map(student => (
+                    <div key={student.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition group relative">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
+                            {student.name.charAt(0)}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-gray-900">{student.name}</h4>
+                            <p className="text-xs text-gray-500">{student.grade}. Sınıf • {student.age} Yaş</p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${getRiskColor(report.totalScore)}`}>
-                             %{report.totalScore} Risk Skoru
-                           </span>
-                           {/* Bütünleşik Rapor İndikatörü */}
-                           {user.role === 'teacher' && (
-                             <span className="text-[10px] text-indigo-500 font-medium flex items-center gap-1">
-                               <PieChart className="w-3 h-3" /> Detay
-                             </span>
-                           )}
-                        </div>
+                        <button 
+                          onClick={() => handleDeleteStudent(student.id)}
+                          className="text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500" />
+                      
+                      {user.role !== 'admin' && (
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => onStartScreening(student)}
+                            className="flex-1 py-2.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-lg font-medium text-xs transition flex items-center justify-center gap-2 border border-gray-200 hover:border-indigo-200"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Tarama Yap
+                          </button>
+                          
+                          <button 
+                            onClick={() => setActiveTab('messages')}
+                            className="px-3 py-2.5 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 text-gray-600 rounded-lg border border-gray-200 transition"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      
+                      {user.role === 'admin' && (
+                        <div className="bg-gray-50 p-2 rounded text-xs text-gray-500 flex items-center gap-1">
+                            <ShieldCheck className="w-3 h-3" /> Yönetici Görünümü
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Quick Stats for Teachers */}
-            {user.role === 'teacher' && students.length > 0 && (
-              <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100">
-                <h4 className="text-orange-800 font-bold mb-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Sınıf Özeti
-                </h4>
-                <div className="flex justify-between items-center text-sm mb-2">
-                  <span className="text-orange-700">Toplam Öğrenci</span>
-                  <span className="font-bold">{students.length}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-orange-700">Yapılan Tarama</span>
-                  <span className="font-bold">{recentReports.length}</span>
-                </div>
+            {/* Right Column: Recent Activity / Reports */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  {user.role === 'admin' ? 'Tüm Sistem Raporları' : 'Son Raporlar'}
+                </h3>
+                <button onClick={() => setActiveTab('archive')} className="text-xs font-semibold text-indigo-600 hover:underline">Tümünü Gör</button>
               </div>
-            )}
+              
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {recentReports.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400 text-sm">
+                    Henüz tamamlanmış bir tarama yok.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-50">
+                    {recentReports.slice(0, 5).map((report) => (
+                      <div 
+                        key={report.id} 
+                        onClick={() => {
+                          const student = students.find(s => s.id === report.studentId);
+                          if(student) onViewReport(report, student);
+                        }}
+                        className="p-4 hover:bg-gray-50 cursor-pointer transition flex items-center justify-between group"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-bold text-gray-700 text-sm">{report.studentName}</span>
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(report.date).toLocaleDateString('tr-TR')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${getRiskColor(report.totalScore)}`}>
+                              %{report.totalScore} Risk Skoru
+                            </span>
+                            {/* Bütünleşik Rapor İndikatörü */}
+                            {user.role === 'teacher' && (
+                              <span className="text-[10px] text-indigo-500 font-medium flex items-center gap-1">
+                                <PieChart className="w-3 h-3" /> Detay
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Stats for Teachers */}
+              {user.role === 'teacher' && students.length > 0 && (
+                <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100">
+                  <h4 className="text-orange-800 font-bold mb-3 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Sınıf Özeti
+                  </h4>
+                  <div className="flex justify-between items-center text-sm mb-2">
+                    <span className="text-orange-700">Toplam Öğrenci</span>
+                    <span className="font-bold">{students.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-orange-700">Yapılan Tarama</span>
+                    <span className="font-bold">{recentReports.length}</span>
+                  </div>
+                  <button onClick={() => setActiveTab('analytics')} className="w-full mt-3 py-2 bg-orange-100 text-orange-800 text-xs font-bold rounded-lg hover:bg-orange-200 transition">
+                    Detaylı Sınıf Analizi
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        </>
         )}
       </main>
 
