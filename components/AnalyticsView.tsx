@@ -73,7 +73,7 @@ const AnalyticsView: React.FC<AnalyticsViewProps> = ({ reports, userRole }) => {
             <PieIcon className="w-5 h-5 text-indigo-600" />
             {userRole === 'teacher' ? 'Sınıf Risk Dağılımı' : 'Genel Risk Durumu'}
           </h3>
-          <div className="h-[300px] w-full flex justify-center">
+          <div className="h-[300px] w-full">
              <ResponsiveContainer width="100%" height="100%">
                <PieChart>
                  <Pie

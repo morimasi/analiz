@@ -114,7 +114,7 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ result, profile }) =>
             <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2 border-b border-gray-100 pb-2">
               <Activity className="w-5 h-5 text-primary" /> Beceriler Haritası
             </h3>
-            <div className="h-[300px] md:h-[350px] w-full bg-slate-50/50 rounded-2xl border border-slate-100 flex items-center justify-center relative">
+            <div className="h-[300px] md:h-[350px] w-full bg-slate-50/50 rounded-2xl border border-slate-100 relative">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
                   <PolarGrid stroke="#cbd5e1" strokeDasharray="3 3" />
