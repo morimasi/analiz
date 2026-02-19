@@ -141,14 +141,14 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
     2. Tespit edilen her bir soruna (örn: 'b/d karıştırma') karşılık gelen bilimsel bir müdahale yöntemi seç.
     3. Etkinlikleri 'oyunlaştırılmış' ve 'yapılandırılmış' olarak dengele.
     4. Aileyi sürece dahil edecek gerçekçi görevler tanımla.
-    5. Çıktıların kısa, öz ve net olsun. Gereksiz uzun açıklamalardan kaçın.
+    5. Çıktıların kısa, öz ve net olsun. Etkinlik açıklamaları ve yöntemler 2-3 cümleyi geçmemelidir. Bu çok önemlidir.
 
     ÇIKTI FORMATI (JSON):
     Aşağıdaki şemaya tam olarak uy.
-    - summary: Öğrencinin eğitsel ihtiyaçlarını ve pedagojik yaklaşımı özetleyen akademik bir paragraf.
-    - goals: En az 3 hedef (Alan, Kısa Vadeli, Uzun Vadeli).
-    - activities: En az 4 detaylı etkinlik (Başlık, Açıklama, Süre, Sıklık, Materyaller, Yöntem).
-    - familyStrategies: Evde uygulanacak 3 strateji.
+    - summary: Öğrencinin eğitsel ihtiyaçlarını ve pedagojik yaklaşımı özetleyen akademik bir paragraf (Max 50 kelime).
+    - goals: Tam olarak 3 hedef (Alan, Kısa Vadeli, Uzun Vadeli).
+    - activities: Tam olarak 4 etkinlik (Başlık, Açıklama, Süre, Sıklık, Materyaller, Yöntem). Açıklamalar kısa olmalı.
+    - familyStrategies: Tam olarak 3 evde uygulanacak strateji.
     - reviewDate: Önerilen değerlendirme tarihi.
   `;
 
@@ -158,9 +158,10 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        // Thinking Config: BEP planı karmaşık olduğu için daha yüksek düşünme bütçesi
-        thinkingConfig: { thinkingBudget: 4096 },
-        maxOutputTokens: 16384, // Increased to avoid cut-off
+        // Thinking Config: Düşünme bütçesini output'a yer kalması için makul seviyede tutuyoruz
+        thinkingConfig: { thinkingBudget: 2048 }, 
+        // Max Output: Yüksek tutuyoruz ki kesilmesin.
+        maxOutputTokens: 32000, 
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -206,8 +207,6 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
     return JSON.parse(text);
   } catch (error) {
     console.error("Plan Generation Error:", error);
-    // Hata durumunda null dönmek yerine UI'da hata mesajı gösterebilmek için null dönüyoruz, 
-    // ancak konsola detayı basıyoruz. UI tarafı null kontrolü yapıyor.
     return null;
   }
 };
