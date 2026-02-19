@@ -260,12 +260,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   </button>
                 )}
 
-                <button 
-                  onClick={() => setActiveTab('analytics')} 
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'analytics' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <BarChart2 className="w-4 h-4"/> Analizler
-                </button>
+                {/* ANALİZLER VELİLERE KAPALI */}
+                {user.role !== 'parent' && (
+                  <button 
+                    onClick={() => setActiveTab('analytics')} 
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'analytics' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <BarChart2 className="w-4 h-4"/> Analizler
+                  </button>
+                )}
+
                 {user.role !== 'admin' && (
                   <button onClick={() => setActiveTab('messages')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'messages' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
                     Mesajlar
@@ -380,7 +384,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
         )}
 
         {/* === TAB: ANALYTICS === */}
-        {activeTab === 'analytics' && (
+        {activeTab === 'analytics' && user.role !== 'parent' && (
           <AnalyticsView reports={recentReports} userRole={user.role} />
         )}
 
