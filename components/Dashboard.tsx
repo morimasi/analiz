@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Student, ScreeningResult, Message } from '../types';
 import { api } from '../services/db';
-import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2 } from 'lucide-react';
+import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -10,7 +10,7 @@ interface DashboardProps {
   onViewReport: (report: ScreeningResult, student: Student) => void;
 }
 
-type Tab = 'overview' | 'students' | 'messages';
+type Tab = 'overview' | 'students' | 'messages' | 'admin_stats';
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening, onViewReport }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -80,18 +80,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Demo ortamında Veli öğretmene, Öğretmen veliye atar.
-    // Basitlik için hardcoded ID veya listeden seçim yapılabilir. 
-    // Burada demo senaryosuna göre karşı tarafı bulmaya çalışacağız.
-    
-    // Gerçek app'te bir "Kişi Seç" dropdown'ı olur.
     let receiverId = '';
     if (user.role === 'parent') {
-       // Çocuğun öğretmeni
        const teacherId = students[0]?.teacherId;
        receiverId = teacherId || 'demo_teacher_1';
     } else {
-       // Öğrencinin velisi (Mock: demo_parent_1)
        receiverId = 'demo_parent_1';
     }
 
@@ -122,18 +115,25 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
     );
   }
 
+  // Admin özel istatistikleri
+  const totalStudents = students.length;
+  const highRiskCount = recentReports.filter(r => r.totalScore >= 65).length;
+  const totalScreenings = recentReports.length;
+
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-indigo-600 p-2 rounded-lg">
+            <div className={`p-2 rounded-lg ${user.role === 'admin' ? 'bg-slate-800' : 'bg-indigo-600'}`}>
                <span className="text-2xl text-white">🧠</span>
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">MindScreen AI</h1>
-              <p className="text-xs text-gray-500 font-medium">{user.role === 'parent' ? 'Veli Paneli' : 'Öğretmen Paneli'}</p>
+              <p className="text-xs text-gray-500 font-medium">
+                {user.role === 'parent' ? 'Veli Paneli' : user.role === 'admin' ? 'Yönetici Paneli' : 'Öğretmen Paneli'}
+              </p>
             </div>
           </div>
           
@@ -141,12 +141,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
              {/* Desktop Nav */}
              <nav className="hidden md:flex bg-gray-100 p-1 rounded-lg">
                 <button onClick={() => setActiveTab('overview')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${activeTab === 'overview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Genel Bakış</button>
-                <button onClick={() => setActiveTab('messages')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'messages' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-                   Mesajlar
-                   {messages.filter(m => !m.isRead && m.receiverId === user.id).length > 0 && (
-                     <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                   )}
-                </button>
+                {user.role !== 'admin' && (
+                  <button onClick={() => setActiveTab('messages')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'messages' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                    Mesajlar
+                    {messages.filter(m => !m.isRead && m.receiverId === user.id).length > 0 && (
+                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                    )}
+                  </button>
+                )}
              </nav>
 
             <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100">
@@ -172,7 +174,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
         {/* MESSAGES TAB */}
-        {activeTab === 'messages' && (
+        {activeTab === 'messages' && user.role !== 'admin' && (
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px]">
               {/* Inbox List */}
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col">
@@ -229,19 +231,48 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
         {activeTab === 'overview' && (
         <>
         {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden animate-fade-in">
+        <div className={`rounded-2xl p-8 text-white shadow-xl relative overflow-hidden animate-fade-in ${user.role === 'admin' ? 'bg-gradient-to-r from-slate-800 to-slate-900' : 'bg-gradient-to-r from-indigo-600 to-purple-700'}`}>
           <div className="relative z-10">
             <h2 className="text-3xl font-bold mb-2">Merhaba, {user.name} 👋</h2>
-            <p className="text-indigo-100 max-w-xl text-lg">
+            <p className={`${user.role === 'admin' ? 'text-slate-300' : 'text-indigo-100'} max-w-xl text-lg`}>
               {user.role === 'parent' 
                 ? 'Çocuğunuzun bilişsel gelişimini takip etmek ve desteklemek için doğru yerdesiniz.' 
-                : 'Sınıfınızdaki öğrencilerin gelişim risklerini erken tespit edip aksiyon alın.'}
+                : user.role === 'admin' 
+                  ? 'Sistem genelindeki tarama verileri ve kullanıcı istatistikleri aşağıdadır.'
+                  : 'Sınıfınızdaki öğrencilerin gelişim risklerini erken tespit edip aksiyon alın.'}
             </p>
           </div>
           <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
             <BrainPattern />
           </div>
         </div>
+
+        {/* Admin Stats Cards */}
+        {user.role === 'admin' && (
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="bg-blue-100 p-3 rounded-xl text-blue-600"><UserIcon className="w-6 h-6"/></div>
+                <div>
+                   <p className="text-gray-500 text-sm">Toplam Öğrenci</p>
+                   <h3 className="text-2xl font-bold text-gray-800">{totalStudents}</h3>
+                </div>
+             </div>
+             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="bg-green-100 p-3 rounded-xl text-green-600"><FileText className="w-6 h-6"/></div>
+                <div>
+                   <p className="text-gray-500 text-sm">Tamamlanan Tarama</p>
+                   <h3 className="text-2xl font-bold text-gray-800">{totalScreenings}</h3>
+                </div>
+             </div>
+             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="bg-red-100 p-3 rounded-xl text-red-600"><AlertCircle className="w-6 h-6"/></div>
+                <div>
+                   <p className="text-gray-500 text-sm">Yüksek Riskli</p>
+                   <h3 className="text-2xl font-bold text-gray-800">{highRiskCount}</h3>
+                </div>
+             </div>
+           </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
@@ -250,7 +281,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <UserIcon className="w-5 h-5 text-indigo-600" />
-                {user.role === 'parent' ? 'Çocuklarım' : 'Sınıf Listesi'}
+                {user.role === 'parent' ? 'Çocuklarım' : 'Öğrenci Listesi'}
               </h3>
               <button 
                 onClick={() => setShowAddModal(true)}
@@ -297,23 +328,30 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                       </button>
                     </div>
                     
-                    <div className="flex gap-2">
-                       <button 
-                        onClick={() => onStartScreening(student)}
-                        className="flex-1 py-2.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-lg font-medium text-xs transition flex items-center justify-center gap-2 border border-gray-200 hover:border-indigo-200"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        Tarama Yap
-                      </button>
-                      
-                      {/* Mesaj Butonu (Sadece karşı role) */}
-                      <button 
-                         onClick={() => setActiveTab('messages')}
-                         className="px-3 py-2.5 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 text-gray-600 rounded-lg border border-gray-200 transition"
-                      >
-                         <Mail className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {user.role !== 'admin' && (
+                      <div className="flex gap-2">
+                         <button 
+                          onClick={() => onStartScreening(student)}
+                          className="flex-1 py-2.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-lg font-medium text-xs transition flex items-center justify-center gap-2 border border-gray-200 hover:border-indigo-200"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Tarama Yap
+                        </button>
+                        
+                        <button 
+                           onClick={() => setActiveTab('messages')}
+                           className="px-3 py-2.5 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 text-gray-600 rounded-lg border border-gray-200 transition"
+                        >
+                           <Mail className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    
+                    {user.role === 'admin' && (
+                       <div className="bg-gray-50 p-2 rounded text-xs text-gray-500 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3" /> Yönetici Görünümü
+                       </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -324,7 +362,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
           <div className="space-y-6">
             <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-indigo-600" />
-              Son Raporlar
+              {user.role === 'admin' ? 'Tüm Sistem Raporları' : 'Son Raporlar'}
             </h3>
             
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -354,6 +392,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${getRiskColor(report.totalScore)}`}>
                              %{report.totalScore} Risk Skoru
                            </span>
+                           {/* Bütünleşik Rapor İndikatörü */}
+                           {user.role === 'teacher' && (
+                             <span className="text-[10px] text-indigo-500 font-medium flex items-center gap-1">
+                               <PieChart className="w-3 h-3" /> Detay
+                             </span>
+                           )}
                         </div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500" />
