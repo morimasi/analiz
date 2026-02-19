@@ -68,13 +68,14 @@ const AnalyticsView: React.FC<AnalyticsViewProps> = ({ reports, userRole }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* Grafik 1: Risk Dağılımı (Özellikle Öğretmen İçin) */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm min-w-0">
           <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
             <PieIcon className="w-5 h-5 text-indigo-600" />
             {userRole === 'teacher' ? 'Sınıf Risk Dağılımı' : 'Genel Risk Durumu'}
           </h3>
           <div className="h-[300px] w-full">
-             <ResponsiveContainer width="100%" height="100%">
+             {/* Width %99 prevents infinite resize loop in flex containers */}
+             <ResponsiveContainer width="99%" height="100%">
                <PieChart>
                  <Pie
                    data={riskDistribution}
@@ -98,13 +99,13 @@ const AnalyticsView: React.FC<AnalyticsViewProps> = ({ reports, userRole }) => {
         </div>
 
         {/* Grafik 2: Zaman İçinde Değişim (Trend) */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm min-w-0">
            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
              <TrendingUp className="w-5 h-5 text-indigo-600" />
              Gelişim Trendi (Son Taramalar)
            </h3>
            <div className="h-[300px] w-full">
-             <ResponsiveContainer width="100%" height="100%">
+             <ResponsiveContainer width="99%" height="100%">
                <LineChart data={trendData}>
                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                  <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} />

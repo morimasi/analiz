@@ -95,8 +95,11 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
       }
     });
 
-    const text = response.text;
+    let text = response.text;
     if (!text) throw new Error("AI boş yanıt döndürdü.");
+    
+    // Markdown temizliği
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
     return JSON.parse(text);
 
@@ -138,6 +141,7 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
     2. Tespit edilen her bir soruna (örn: 'b/d karıştırma') karşılık gelen bilimsel bir müdahale yöntemi seç.
     3. Etkinlikleri 'oyunlaştırılmış' ve 'yapılandırılmış' olarak dengele.
     4. Aileyi sürece dahil edecek gerçekçi görevler tanımla.
+    5. Çıktıların kısa, öz ve net olsun. Gereksiz uzun açıklamalardan kaçın.
 
     ÇIKTI FORMATI (JSON):
     Aşağıdaki şemaya tam olarak uy.
@@ -156,7 +160,7 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
         responseMimeType: "application/json",
         // Thinking Config: BEP planı karmaşık olduğu için daha yüksek düşünme bütçesi
         thinkingConfig: { thinkingBudget: 4096 },
-        maxOutputTokens: 12000, // Uzun çıktı için geniş alan
+        maxOutputTokens: 16384, // Increased to avoid cut-off
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -193,8 +197,11 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
       }
     });
 
-    const text = response.text;
+    let text = response.text;
     if (!text) throw new Error("AI Plan oluşturamadı (Boş yanıt).");
+    
+    // Markdown temizliği - JSON Parse hatasını önlemek için
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
     return JSON.parse(text);
   } catch (error) {
