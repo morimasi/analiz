@@ -43,18 +43,27 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
     setLoading(true);
     try {
       // Paralel veri çekimi
-      const [fetchedStudents, fetchedReports, fetchedMessages, fetchedPlans] = await Promise.all([
+      const promises: Promise<any>[] = [
         api.students.list(user.id, user.role),
         api.screenings.listByUser(user.id, user.role),
-        api.messages.list(user.id),
-        // Yeni: Kullanıcının tüm planlarını çek
-        api.plans.list(user.id, user.role)
-      ]);
+        api.messages.list(user.id)
+      ];
+
+      // Sadece öğretmenler planları çekebilir
+      if (user.role !== 'parent') {
+        promises.push(api.plans.list(user.id, user.role));
+      }
+
+      const results = await Promise.all(promises);
       
-      setStudents(fetchedStudents);
-      setRecentReports(fetchedReports);
-      setMessages(fetchedMessages);
-      setAllPlans(fetchedPlans);
+      setStudents(results[0] as Student[]);
+      setRecentReports(results[1] as (ScreeningResult & { studentName: string })[]);
+      setMessages(results[2] as Message[]);
+      
+      if (user.role !== 'parent') {
+        setAllPlans(results[3] as (EducationPlan & { studentName?: string })[]);
+      }
+
     } catch (e) {
       console.error("Veri yüklenemedi", e);
     } finally {
@@ -207,12 +216,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                 >
                   <FolderOpen className="w-4 h-4"/> Rapor Arşivi
                 </button>
-                <button 
-                  onClick={() => setActiveTab('plan_archive')} 
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'plan_archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <ClipboardList className="w-4 h-4"/> BEP Arşivi
-                </button>
+                
+                {/* BEP Arşivi Sadece Öğretmen ve Yöneticiler İçin */}
+                {user.role !== 'parent' && (
+                  <button 
+                    onClick={() => setActiveTab('plan_archive')} 
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'plan_archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <ClipboardList className="w-4 h-4"/> BEP Arşivi
+                  </button>
+                )}
+
                 <button 
                   onClick={() => setActiveTab('analytics')} 
                   className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'analytics' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
@@ -252,7 +266,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
         {/* === TAB: EDUCATION PLAN (VIEW / CREATE) === */}
-        {activeTab === 'education_plan' && planTargetStudent && (
+        {/* Sadece Öğretmen ve Yönetici Görebilir */}
+        {activeTab === 'education_plan' && planTargetStudent && user.role !== 'parent' && (
            <EducationPlanView 
              student={planTargetStudent}
              teacherId={user.id}
@@ -268,7 +283,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
         )}
 
         {/* === TAB: PLAN ARCHIVE (NEW) === */}
-        {activeTab === 'plan_archive' && (
+        {/* Sadece Öğretmen ve Yönetici Görebilir */}
+        {activeTab === 'plan_archive' && user.role !== 'parent' && (
            <PlanArchive 
              plans={allPlans} 
              onViewPlan={handleViewArchivedPlan} 
