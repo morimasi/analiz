@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, SchemaType } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { ScreeningResult, CATEGORY_LABELS, EducationPlanContent } from '../types';
 
 // Ortak AI Client kurulumu
@@ -11,6 +11,7 @@ const getAiClient = () => {
 }
 
 // Model Yapılandırması
+// Gemini 1.5 serisi yerine Gemini 3 serisi Thinking (Düşünme) modu ile
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 export const generateAnalysis = async (result: ScreeningResult, role: string, age: number): Promise<{ letter: string, actionSteps: string[] }> => {
