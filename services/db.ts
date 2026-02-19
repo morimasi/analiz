@@ -66,14 +66,15 @@ export const api = {
   // STUDENTS
   students: {
     list: async (userId: string, role: Role): Promise<Student[]> => {
-      const response = await fetch(`/api/students?userId=${userId}&role=${role}`);
+      const params = new URLSearchParams({ userId, role });
+      const response = await fetch(`/api/students?${params.toString()}`);
       if (!response.ok) return [];
       
       const rows = await response.json();
       return rows.map((r: any) => ({
         id: r.id,
-        parentId: r.parent_id,
-        teacherId: r.teacher_id,
+        parentId: r.parent_id || r.parentId, // Backend camelCase or snake_case
+        teacherId: r.teacher_id || r.teacherId,
         name: r.name,
         age: r.age,
         grade: r.grade,
@@ -93,8 +94,8 @@ export const api = {
       const r = await response.json();
       return {
         id: r.id,
-        parentId: r.parent_id,
-        teacherId: r.teacher_id,
+        parentId: r.parent_id || r.parentId,
+        teacherId: r.teacher_id || r.teacherId,
         name: r.name,
         age: r.age,
         grade: r.grade,
@@ -122,13 +123,15 @@ export const api = {
     },
 
     listByUser: async (userId: string, role: Role): Promise<(ScreeningResult & { studentName: string })[]> => {
-      const response = await fetch(`/api/screenings?userId=${userId}&role=${role}`);
+      const params = new URLSearchParams({ userId, role });
+      const response = await fetch(`/api/screenings?${params.toString()}`);
       if (!response.ok) return [];
       return await response.json();
     },
 
     getCombinedReport: async (studentId: string): Promise<ScreeningResult[]> => {
-        const response = await fetch(`/api/screenings?userId=${studentId}&role=student_specific`);
+        const params = new URLSearchParams({ userId: studentId, role: 'student_specific' });
+        const response = await fetch(`/api/screenings?${params.toString()}`);
         if (!response.ok) return [];
         return await response.json();
     }
@@ -137,7 +140,8 @@ export const api = {
   // MESSAGES
   messages: {
     list: async (userId: string): Promise<Message[]> => {
-      const response = await fetch(`/api/messages?userId=${userId}`);
+      const params = new URLSearchParams({ userId });
+      const response = await fetch(`/api/messages?${params.toString()}`);
       if (!response.ok) return [];
       return await response.json();
     },
@@ -156,12 +160,17 @@ export const api = {
 
   // EDUCATION PLANS (BEP)
   plans: {
-    // userId ve role ekledik, studentId opsiyonel oldu
     list: async (userId: string, role: Role, studentId?: string): Promise<(EducationPlan & { studentName?: string })[]> => {
-      let url = `/api/education-plans?userId=${userId}&role=${role}`;
-      if (studentId) url = `/api/education-plans?studentId=${studentId}`; // Geriye dönük uyumluluk veya spesifik filtreleme
+      const params = new URLSearchParams();
       
-      const response = await fetch(url);
+      if (studentId) {
+        params.append('studentId', studentId);
+      } else {
+        if (userId) params.append('userId', userId);
+        if (role) params.append('role', role);
+      }
+      
+      const response = await fetch(`/api/education-plans?${params.toString()}`);
       if (!response.ok) return [];
       return await response.json();
     },
