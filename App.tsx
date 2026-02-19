@@ -4,9 +4,10 @@ import Dashboard from './components/Dashboard';
 import Questionnaire from './components/Questionnaire';
 import ResultDashboard from './components/ResultDashboard';
 import { User, Student, ScreeningResult, UserProfile } from './types';
-import { authService, db } from './services/db';
+import { api } from './services/db';
 import { calculateResults, AnswerValue } from './utils/scoring';
 import { questions } from './data/questions';
+import { Loader2 } from 'lucide-react';
 
 type AppView = 'auth' | 'dashboard' | 'questionnaire' | 'result';
 
@@ -15,26 +16,37 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>('auth');
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
   const [activeResult, setActiveResult] = useState<ScreeningResult | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session
-    const currentUser = authService.getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-      setView('dashboard');
-    }
+    checkSession();
   }, []);
 
-  const handleLogin = () => {
-    const currentUser = authService.getCurrentUser();
+  const checkSession = async () => {
+    try {
+      const currentUser = await api.auth.getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+        setView('dashboard');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    // AuthView handles the API call, we just need to get the user state updated
+    const currentUser = await api.auth.getCurrentUser();
     if (currentUser) {
       setUser(currentUser);
       setView('dashboard');
     }
   };
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleLogout = async () => {
+    await api.auth.logout();
     setUser(null);
     setView('auth');
     setActiveStudent(null);
@@ -49,35 +61,39 @@ const App: React.FC = () => {
 
   const handleViewReport = (result: ScreeningResult, student: Student) => {
     setActiveResult(result);
-    // Student might need to be constructed if we only have name in report, 
-    // but here we pass the full student object from dashboard
     setActiveStudent(student);
     setView('result');
   };
 
-  const handleCompleteScreening = (answers: Record<string, AnswerValue>) => {
+  const handleCompleteScreening = async (answers: Record<string, AnswerValue>) => {
     if (!activeStudent || !user) return;
 
-    // Convert Student to UserProfile format for scoring engine compatibility
     const scoringProfile: UserProfile = {
       name: activeStudent.name,
       age: activeStudent.age,
       grade: activeStudent.grade,
-      role: user.role // The person filling the form
+      role: user.role
     };
 
     const calculatedResult = calculateResults(answers, questions, scoringProfile);
     
-    // Save to DB
-    const savedResult = db.saveScreening({
-      ...calculatedResult,
-      studentId: activeStudent.id,
-      date: new Date().toISOString(),
-      completedBy: user.role
-    });
-
-    setActiveResult(savedResult);
-    setView('result');
+    // Save to DB (Async)
+    setLoading(true);
+    try {
+        const savedResult = await api.screenings.save({
+          ...calculatedResult,
+          studentId: activeStudent.id,
+          date: new Date().toISOString(),
+          completedBy: user.role
+        });
+    
+        setActiveResult(savedResult);
+        setView('result');
+    } catch(e) {
+        alert("Sonuç kaydedilirken bir hata oluştu.");
+    } finally {
+        setLoading(false);
+    }
   };
 
   const handleBackToDashboard = () => {
@@ -86,11 +102,18 @@ const App: React.FC = () => {
     setActiveResult(null);
   };
 
+  if (loading) {
+     return (
+         <div className="min-h-screen flex items-center justify-center bg-gray-50">
+             <Loader2 className="w-8 h-8 text-primary animate-spin" />
+         </div>
+     )
+  }
+
   if (!user || view === 'auth') {
     return <AuthView onLogin={handleLogin} />;
   }
 
-  // Helper to convert Student + User Role to UserProfile for components that need it
   const getProfileForComponents = (): UserProfile | null => {
     if (!activeStudent || !user) return null;
     return {
@@ -114,7 +137,6 @@ const App: React.FC = () => {
 
       {view === 'questionnaire' && activeStudent && (
         <div className="pt-6">
-           {/* Top Bar for Context */}
            <div className="max-w-4xl mx-auto px-4 mb-4 flex justify-between items-center">
              <button 
                onClick={handleBackToDashboard}

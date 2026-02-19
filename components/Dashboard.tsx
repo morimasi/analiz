@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { User, Student, ScreeningResult, Role, CATEGORY_LABELS, EvaluationCategory } from '../types';
-import { db, authService } from '../services/db';
-import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, GraduationCap, LogOut, Trash2, AlertCircle } from 'lucide-react';
+import { User, Student, ScreeningResult, Message } from '../types';
+import { api } from '../services/db';
+import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2 } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -10,25 +10,45 @@ interface DashboardProps {
   onViewReport: (report: ScreeningResult, student: Student) => void;
 }
 
+type Tab = 'overview' | 'students' | 'messages';
+
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening, onViewReport }) => {
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [loading, setLoading] = useState(true);
+  
   const [students, setStudents] = useState<Student[]>([]);
   const [recentReports, setRecentReports] = useState<(ScreeningResult & { studentName: string })[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  
   const [showAddModal, setShowAddModal] = useState(false);
   const [newStudent, setNewStudent] = useState({ name: '', age: '', grade: '', gender: 'male' });
+  const [newMessage, setNewMessage] = useState({ to: '', content: '' });
 
   // Data Loading
   useEffect(() => {
-    refreshData();
+    loadData();
   }, [user]);
 
-  const refreshData = () => {
-    const myStudents = db.getStudents(user.id, user.role);
-    setStudents(myStudents);
-    const reports = db.getRecentScreeningsByUser(user.id, user.role);
-    setRecentReports(reports);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [fetchedStudents, fetchedReports, fetchedMessages] = await Promise.all([
+        api.students.list(user.id, user.role),
+        api.screenings.listByUser(user.id, user.role),
+        api.messages.list(user.id)
+      ]);
+      
+      setStudents(fetchedStudents);
+      setRecentReports(fetchedReports);
+      setMessages(fetchedMessages);
+    } catch (e) {
+      console.error("Veri yüklenemedi", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddStudent = (e: React.FormEvent) => {
+  const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newStudent.name && newStudent.age && newStudent.grade) {
       const studentData: any = {
@@ -44,18 +64,45 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
         studentData.teacherId = user.id;
       }
 
-      db.addStudent(studentData);
+      await api.students.add(studentData);
       setShowAddModal(false);
       setNewStudent({ name: '', age: '', grade: '', gender: 'male' });
-      refreshData();
+      loadData();
     }
   };
 
-  const handleDeleteStudent = (id: string) => {
+  const handleDeleteStudent = async (id: string) => {
     if (confirm("Öğrenci kaydını silmek istediğinize emin misiniz?")) {
-      db.deleteStudent(id);
-      refreshData();
+      await api.students.delete(id);
+      loadData();
     }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Demo ortamında Veli öğretmene, Öğretmen veliye atar.
+    // Basitlik için hardcoded ID veya listeden seçim yapılabilir. 
+    // Burada demo senaryosuna göre karşı tarafı bulmaya çalışacağız.
+    
+    // Gerçek app'te bir "Kişi Seç" dropdown'ı olur.
+    let receiverId = '';
+    if (user.role === 'parent') {
+       // Çocuğun öğretmeni
+       const teacherId = students[0]?.teacherId;
+       receiverId = teacherId || 'demo_teacher_1';
+    } else {
+       // Öğrencinin velisi (Mock: demo_parent_1)
+       receiverId = 'demo_parent_1';
+    }
+
+    await api.messages.send({
+      senderId: user.id,
+      receiverId: receiverId,
+      content: newMessage.content,
+      senderName: user.name
+    });
+    setNewMessage({ ...newMessage, content: '' });
+    loadData();
   };
 
   const getRiskColor = (score: number) => {
@@ -63,6 +110,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
     if (score >= 35) return 'text-orange-600 bg-orange-50 border-orange-100';
     return 'text-green-600 bg-green-50 border-green-100';
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Verileriniz güvenle yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
@@ -80,13 +138,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-gray-50 rounded-full border border-gray-100">
+             {/* Desktop Nav */}
+             <nav className="hidden md:flex bg-gray-100 p-1 rounded-lg">
+                <button onClick={() => setActiveTab('overview')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${activeTab === 'overview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>Genel Bakış</button>
+                <button onClick={() => setActiveTab('messages')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'messages' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                   Mesajlar
+                   {messages.filter(m => !m.isRead && m.receiverId === user.id).length > 0 && (
+                     <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                   )}
+                </button>
+             </nav>
+
+            <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100">
               <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm">
                 {user.name.charAt(0)}
               </div>
-              <div className="text-sm">
-                <p className="font-semibold text-gray-700">{user.name}</p>
-                {user.schoolName && <p className="text-xs text-gray-500">{user.schoolName}</p>}
+              <div className="hidden md:block text-sm mr-2">
+                <p className="font-semibold text-gray-700 leading-none">{user.name}</p>
               </div>
             </div>
             <button 
@@ -100,10 +168,68 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
         </div>
       </header>
 
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
+        {/* MESSAGES TAB */}
+        {activeTab === 'messages' && (
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px]">
+              {/* Inbox List */}
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col">
+                 <div className="p-4 border-b border-gray-100 bg-gray-50">
+                    <h3 className="font-bold text-gray-800">Gelen Kutusu</h3>
+                 </div>
+                 <div className="flex-1 overflow-y-auto">
+                    {messages.length === 0 ? (
+                      <div className="p-8 text-center text-gray-400 text-sm">Mesajınız yok.</div>
+                    ) : (
+                      messages.map(msg => (
+                        <div key={msg.id} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${msg.senderId === user.id ? 'bg-indigo-50/30' : ''}`}>
+                           <div className="flex justify-between mb-1">
+                              <span className="font-bold text-sm text-gray-800">{msg.senderId === user.id ? 'Ben' : msg.senderName}</span>
+                              <span className="text-xs text-gray-400">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                           </div>
+                           <p className="text-sm text-gray-600 line-clamp-2">{msg.content}</p>
+                        </div>
+                      ))
+                    )}
+                 </div>
+              </div>
+
+              {/* Compose */}
+              <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 flex flex-col">
+                 <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <Send className="w-4 h-4 text-indigo-600" /> Yeni Mesaj Gönder
+                 </h3>
+                 <div className="flex-1 flex flex-col gap-4">
+                    <div className="bg-yellow-50 p-3 rounded-lg text-xs text-yellow-700 border border-yellow-100">
+                       Not: Bu demo sürümünde mesajlar otomatik olarak bağlı olduğunuz {user.role === 'parent' ? 'sınıf öğretmenine' : 'öğrenci velisine'} iletilir.
+                    </div>
+                    <textarea 
+                       className="w-full flex-1 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-gray-50"
+                       placeholder="Mesajınızı buraya yazın..."
+                       value={newMessage.content}
+                       onChange={e => setNewMessage({...newMessage, content: e.target.value})}
+                    ></textarea>
+                    <div className="flex justify-end">
+                       <button 
+                         onClick={handleSendMessage}
+                         disabled={!newMessage.content}
+                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                       >
+                         Gönder <Send className="w-4 h-4" />
+                       </button>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        )}
+
+        {/* OVERVIEW TAB */}
+        {activeTab === 'overview' && (
+        <>
         {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden animate-fade-in">
           <div className="relative z-10">
             <h2 className="text-3xl font-bold mb-2">Merhaba, {user.name} 👋</h2>
             <p className="text-indigo-100 max-w-xl text-lg">
@@ -124,7 +250,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <UserIcon className="w-5 h-5 text-indigo-600" />
-                {user.role === 'parent' ? 'Çocuklarım' : 'Öğrenci Listesi'}
+                {user.role === 'parent' ? 'Çocuklarım' : 'Sınıf Listesi'}
               </h3>
               <button 
                 onClick={() => setShowAddModal(true)}
@@ -171,13 +297,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                       </button>
                     </div>
                     
-                    <button 
-                      onClick={() => onStartScreening(student)}
-                      className="w-full py-3 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-xl font-medium text-sm transition flex items-center justify-center gap-2 border border-gray-200 hover:border-indigo-200"
-                    >
-                      <FileText className="w-4 h-4" />
-                      Yeni Tarama Başlat
-                    </button>
+                    <div className="flex gap-2">
+                       <button 
+                        onClick={() => onStartScreening(student)}
+                        className="flex-1 py-2.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-lg font-medium text-xs transition flex items-center justify-center gap-2 border border-gray-200 hover:border-indigo-200"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        Tarama Yap
+                      </button>
+                      
+                      {/* Mesaj Butonu (Sadece karşı role) */}
+                      <button 
+                         onClick={() => setActiveTab('messages')}
+                         className="px-3 py-2.5 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 text-gray-600 rounded-lg border border-gray-200 transition"
+                      >
+                         <Mail className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -246,6 +382,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
             )}
           </div>
         </div>
+        </>
+        )}
       </main>
 
       {/* Add Student Modal */}

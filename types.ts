@@ -58,6 +58,17 @@ export interface ScreeningResult {
   completedBy: Role;
 }
 
+export interface Message {
+  id: string;
+  senderId: string;
+  receiverId: string; // Genelde Veli <-> Öğretmen
+  studentId?: string; // Konu olan öğrenci
+  content: string;
+  isRead: boolean;
+  createdAt: string;
+  senderName?: string; // UI için joinlenmiş veri
+}
+
 // Eski UserProfile tipini geriye dönük uyumluluk veya formlarda kullanım için Student tipine benzer tutuyoruz
 export interface UserProfile extends Omit<Student, 'id'> {
   role: Role; // Testi çözen kişinin rolü

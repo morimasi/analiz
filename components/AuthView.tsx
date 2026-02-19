@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { authService } from '../services/db';
+import { api } from '../services/db';
 import { Role } from '../types';
-import { Brain, User, GraduationCap, ArrowRight, Lock, Zap } from 'lucide-react';
+import { Brain, User, GraduationCap, ArrowRight, Lock, Loader2 } from 'lucide-react';
 
 interface AuthViewProps {
   onLogin: () => void;
@@ -10,6 +10,7 @@ interface AuthViewProps {
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState<Role>('parent');
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -22,48 +23,55 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
     handleLoginProcess(formData.email);
   };
 
-  const handleLoginProcess = (email: string) => {
+  const handleLoginProcess = async (email: string) => {
     setError('');
+    setLoading(true);
     try {
       if (isLogin) {
-        const user = authService.login(email, role);
+        const user = await api.auth.login(email, role);
         if (user) {
           onLogin();
         } else {
-          setError('Kullanıcı bulunamadı veya rol eşleşmedi. Lütfen kayıt olun veya demo butonlarını kullanın.');
+          setError('Kullanıcı bulunamadı veya rol eşleşmedi. Lütfen kayıt olun.');
         }
       } else {
-        // Register
         if (!formData.name || !formData.email) {
           setError('Lütfen tüm alanları doldurun.');
+          setLoading(false);
           return;
         }
-        authService.register(formData.name, formData.email, role, formData.schoolName);
+        await api.auth.register({
+            name: formData.name,
+            email: formData.email,
+            role: role,
+            schoolName: formData.schoolName
+        });
         onLogin();
       }
     } catch (err: any) {
       setError(err.message || 'Bir hata oluştu.');
+    } finally {
+        setLoading(false);
     }
   };
 
-  const handleDemoLogin = (demoRole: Role) => {
+  const handleDemoLogin = async (demoRole: Role) => {
     setRole(demoRole);
-    // State update is async, so we pass the email directly but need to wait for role or pass it
-    // Better: Update state then auto-login won't work instantly due to closure.
-    // Solution: Just call login with hardcoded values
-    
-    // Slight delay to allow tab switch animation if needed, but direct call is better
+    setLoading(true);
     const email = demoRole === 'parent' ? 'veli@demo.com' : 'ogretmen@demo.com';
     
-    // We manually set the role state for UI consistency
-    setRole(demoRole); 
-    
-    // Bypass the form state and call auth service directly
-    const user = authService.login(email, demoRole);
-    if(user) {
-        onLogin();
-    } else {
-        setError("Demo verisi yüklenemedi. Lütfen sayfayı yenileyin.");
+    // Slight delay to simulate feeling of logging in
+    try {
+        const user = await api.auth.login(email, demoRole);
+        if(user) {
+            onLogin();
+        } else {
+            setError("Demo verisi yüklenemedi. Sayfayı yenileyip tekrar deneyin.");
+        }
+    } catch(e) {
+        setError("Giriş hatası.");
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -155,24 +163,26 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                  <div className="flex items-start gap-2">
                     <Lock className="w-4 h-4 text-yellow-600 mt-0.5" />
                     <p className="text-xs text-yellow-700 leading-tight">
-                      <strong>Demo Modu:</strong> Şifre gerekmez. Kayıtlı e-posta adresinizi girin veya aşağıdaki hızlı butonları kullanın.
+                      <strong>Demo Modu:</strong> Şifre gerekmez. Hızlı giriş için butonları kullanın.
                     </p>
                  </div>
                  
                  <div className="flex gap-2">
                     <button
                       type="button"
+                      disabled={loading}
                       onClick={() => handleDemoLogin('parent')}
-                      className="flex-1 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1"
+                      className="flex-1 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1 disabled:opacity-50"
                     >
-                        <User className="w-3 h-3" /> Demo Veli
+                        {loading ? <Loader2 className="w-3 h-3 animate-spin"/> : <User className="w-3 h-3" />} Demo Veli
                     </button>
                     <button
                       type="button"
+                      disabled={loading}
                       onClick={() => handleDemoLogin('teacher')}
-                      className="flex-1 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1"
+                      className="flex-1 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1 disabled:opacity-50"
                     >
-                        <GraduationCap className="w-3 h-3" /> Demo Öğretmen
+                        {loading ? <Loader2 className="w-3 h-3 animate-spin"/> : <GraduationCap className="w-3 h-3" />} Demo Öğretmen
                     </button>
                  </div>
                </div>
@@ -187,9 +197,10 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-primary hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition active:scale-[0.98]"
+                disabled={loading}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-primary hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition active:scale-[0.98] disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                {isLogin ? 'Giriş Yap' : 'Kayıt Ol'}
+                {loading ? 'İşleniyor...' : (isLogin ? 'Giriş Yap' : 'Kayıt Ol')}
               </button>
             </div>
           </form>
@@ -209,6 +220,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             <div className="mt-6">
               <button
                 onClick={() => setIsLogin(!isLogin)}
+                disabled={loading}
                 className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-gray-300 rounded-xl shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition"
               >
                 {isLogin ? (
