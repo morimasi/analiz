@@ -217,5 +217,19 @@ export const api = {
       if (!response.ok) throw new Error('Plan kaydedilemedi');
       return await response.json();
     }
+  },
+
+  // INVITATIONS (YENİ)
+  invitations: {
+    create: async (teacherId: string, studentId: string, parentEmail: string): Promise<{ success: boolean; link: string }> => {
+      const response = await fetch('/api/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teacherId, studentId, parentEmail })
+      });
+      
+      if (!response.ok) throw new Error('Davetiye oluşturulamadı');
+      return await response.json();
+    }
   }
 };

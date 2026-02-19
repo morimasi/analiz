@@ -9,6 +9,7 @@
 -- ============================================================================
 
 -- 1. TEMİZLİK (Dikkat: Varolan verileri siler)
+DROP TABLE IF EXISTS invitations CASCADE;
 DROP TABLE IF EXISTS education_plans CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS screenings CASCADE;
@@ -80,6 +81,16 @@ CREATE TABLE education_plans (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- F. DAVETİYELER (INVITATIONS) - YENİ
+CREATE TABLE invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    parent_email TEXT NOT NULL,
+    status TEXT DEFAULT 'pending', -- pending, accepted
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 4. İNDEKSLER (Performans için)
 CREATE INDEX idx_students_parent_id ON students(parent_id);
 CREATE INDEX idx_students_teacher_id ON students(teacher_id);
@@ -87,6 +98,7 @@ CREATE INDEX idx_screenings_student_id ON screenings(student_id);
 CREATE INDEX idx_messages_receiver_id ON messages(receiver_id);
 CREATE INDEX idx_messages_sender_id ON messages(sender_id);
 CREATE INDEX idx_education_plans_student_id ON education_plans(student_id);
+CREATE INDEX idx_invitations_student_id ON invitations(student_id);
 
 -- ============================================================================
 -- 5. SEED DATA (BAŞLANGIÇ VERİLERİ)

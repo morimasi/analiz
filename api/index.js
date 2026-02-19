@@ -340,6 +340,26 @@ app.post('/api/education-plans', async (req, res) => {
   }
 });
 
+// 6. INVITATIONS (YENİ)
+app.post('/api/invitations', async (req, res) => {
+  const { teacherId, studentId, parentEmail } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO invitations (teacher_id, student_id, parent_email) VALUES ($1, $2, $3) RETURNING id',
+      [teacherId, studentId, parentEmail]
+    );
+    
+    const inviteId = result.rows[0].id;
+    // In a real app, this would be your actual domain
+    const inviteLink = `https://mindscreen-ai.app/register?invite=${inviteId}`;
+    
+    res.json({ success: true, link: inviteLink });
+  } catch (err) {
+    console.error("Invitation Error:", err);
+    res.status(500).json({ error: "Davetiye oluşturulamadı." });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
