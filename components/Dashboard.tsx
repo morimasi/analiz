@@ -5,7 +5,7 @@ import ArchiveView from './ArchiveView';
 import AnalyticsView from './AnalyticsView';
 import EducationPlanView from './EducationPlanView'; 
 import PlanArchive from './PlanArchive'; // YENİ COMPONENT
-import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen, ClipboardList } from 'lucide-react';
+import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen, ClipboardList, Sparkles } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -530,10 +530,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                         {user.role === 'teacher' && (
                            <button 
                              onClick={() => handleCreateEducationPlan(report)}
-                             className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition opacity-0 group-hover:opacity-100"
+                             className="text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 hover:scale-105 active:scale-95 border border-purple-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition shadow-sm ml-2"
                              title="Bireyselleştirilmiş Eğitim Planı Oluştur"
                            >
-                              <ClipboardList className="w-3 h-3" /> BEP
+                              <Sparkles className="w-3 h-3" /> BEP Oluştur
                            </button>
                         )}
                         
