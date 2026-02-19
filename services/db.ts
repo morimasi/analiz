@@ -1,4 +1,4 @@
-import { User, Student, ScreeningResult, Role, Message } from '../types';
+import { User, Student, ScreeningResult, Role, Message, EducationPlan } from '../types';
 
 /* 
   =============================================================================
@@ -161,6 +161,26 @@ export const api = {
       });
       
       if (!response.ok) throw new Error('Mesaj gönderilemedi');
+      return await response.json();
+    }
+  },
+
+  // EDUCATION PLANS (BEP)
+  plans: {
+    list: async (studentId: string): Promise<EducationPlan[]> => {
+      const response = await fetch(`/api/education-plans?studentId=${studentId}`);
+      if (!response.ok) return [];
+      return await response.json();
+    },
+
+    save: async (plan: Omit<EducationPlan, 'id' | 'createdAt'>): Promise<EducationPlan> => {
+      const response = await fetch('/api/education-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(plan)
+      });
+
+      if (!response.ok) throw new Error('Plan kaydedilemedi');
       return await response.json();
     }
   }

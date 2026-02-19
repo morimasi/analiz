@@ -3,7 +3,8 @@ import { User, Student, ScreeningResult, Message } from '../types';
 import { api } from '../services/db';
 import ArchiveView from './ArchiveView';
 import AnalyticsView from './AnalyticsView';
-import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen } from 'lucide-react';
+import EducationPlanView from './EducationPlanView'; // Yeni Modül Import
+import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen, ClipboardList } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -12,7 +13,7 @@ interface DashboardProps {
   onViewReport: (report: ScreeningResult, student: Student) => void;
 }
 
-type Tab = 'overview' | 'students' | 'messages' | 'archive' | 'analytics';
+type Tab = 'overview' | 'students' | 'messages' | 'archive' | 'analytics' | 'education_plan';
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening, onViewReport }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -22,6 +23,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   const [recentReports, setRecentReports] = useState<(ScreeningResult & { studentName: string })[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   
+  // Eğitim Planı için State
+  const [planTargetStudent, setPlanTargetStudent] = useState<Student | null>(null);
+  const [planTargetScreening, setPlanTargetScreening] = useState<ScreeningResult | null>(null);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [newStudent, setNewStudent] = useState({ name: '', age: '', grade: '', gender: 'male' });
   const [newMessage, setNewMessage] = useState({ to: '', content: '' });
@@ -102,13 +107,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
 
   const handleArchiveReportView = (report: ScreeningResult) => {
     const student = students.find(s => s.id === report.studentId);
-    // Öğrenci bulunamazsa (örn silinmişse) geçici bir obje oluşturabiliriz veya hata verebiliriz.
-    // Şimdilik, arşivden bakıldığında öğrenci nesnesi zorunlu olmasın diye onViewReport'u biraz esnetmek gerekebilir
-    // ama en temiz yol studentId ile öğrenciyi bulmaktır.
     if(student) {
         onViewReport(report, student);
     } else {
-        // Fallback for demo or deleted students
         const mockStudent: Student = { 
             id: report.studentId || 'unknown', 
             name: (report as any).studentName || 'Bilinmeyen Öğrenci', 
@@ -116,6 +117,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
             grade: '?' 
         };
         onViewReport(report, mockStudent);
+    }
+  };
+
+  // Yeni Fonksiyon: Eğitim Planı Başlatma
+  const handleOpenEducationPlan = (report: ScreeningResult) => {
+    const student = students.find(s => s.id === report.studentId);
+    if (student) {
+      setPlanTargetStudent(student);
+      setPlanTargetScreening(report);
+      setActiveTab('education_plan');
     }
   };
 
@@ -211,6 +222,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
+        {/* === TAB: EDUCATION PLAN (NEW) === */}
+        {activeTab === 'education_plan' && planTargetStudent && planTargetScreening && user.role === 'teacher' && (
+           <EducationPlanView 
+             student={planTargetStudent}
+             screeningResult={planTargetScreening}
+             teacherId={user.id}
+             onBack={() => setActiveTab('overview')}
+           />
+        )}
+
         {/* === TAB: MESSAGES === */}
         {activeTab === 'messages' && user.role !== 'admin' && (
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px] animate-fade-in">
@@ -426,13 +447,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                     {recentReports.slice(0, 5).map((report) => (
                       <div 
                         key={report.id} 
-                        onClick={() => {
+                        className="p-4 hover:bg-gray-50 transition flex items-center justify-between group"
+                      >
+                        <div onClick={() => {
                           const student = students.find(s => s.id === report.studentId);
                           if(student) onViewReport(report, student);
-                        }}
-                        className="p-4 hover:bg-gray-50 cursor-pointer transition flex items-center justify-between group"
-                      >
-                        <div>
+                        }} className="cursor-pointer flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-bold text-gray-700 text-sm">{report.studentName}</span>
                             <span className="text-[10px] text-gray-400">
@@ -443,15 +463,27 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                             <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${getRiskColor(report.totalScore)}`}>
                               %{report.totalScore} Risk Skoru
                             </span>
-                            {/* Bütünleşik Rapor İndikatörü */}
-                            {user.role === 'teacher' && (
-                              <span className="text-[10px] text-indigo-500 font-medium flex items-center gap-1">
-                                <PieChart className="w-3 h-3" /> Detay
-                              </span>
-                            )}
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500" />
+
+                        {/* ÖĞRETMEN İÇİN PLAN OLUŞTURMA BUTONU */}
+                        {user.role === 'teacher' && (
+                           <button 
+                             onClick={() => handleOpenEducationPlan(report)}
+                             className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition opacity-0 group-hover:opacity-100"
+                             title="Bireyselleştirilmiş Eğitim Planı Oluştur"
+                           >
+                              <ClipboardList className="w-3 h-3" /> BEP
+                           </button>
+                        )}
+                        
+                        {user.role !== 'teacher' && (
+                             <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 cursor-pointer" onClick={() => {
+                                const student = students.find(s => s.id === report.studentId);
+                                if(student) onViewReport(report, student);
+                              }}/>
+                        )}
+
                       </div>
                     ))}
                   </div>

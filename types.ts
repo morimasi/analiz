@@ -69,6 +69,40 @@ export interface Message {
   senderName?: string; // UI için joinlenmiş veri
 }
 
+// --- EĞİTİM PLANI (BEP) TİPLERİ ---
+
+export interface PlanGoal {
+  area: string; // Örn: Okuma Becerileri
+  shortTerm: string; // Kısa vadeli hedef
+  longTerm: string; // Uzun vadeli hedef
+}
+
+export interface PlanActivity {
+  title: string;
+  description: string;
+  duration: string; // "20 dakika"
+  frequency: string; // "Haftada 3 gün"
+  materials: string[]; // Kullanılacak materyaller
+  method: string; // Örn: Çok duyulu öğretim
+}
+
+export interface EducationPlanContent {
+  summary: string; // Genel pedagojik özet
+  goals: PlanGoal[]; // Hedefler listesi
+  activities: PlanActivity[]; // Etkinlik planı
+  familyStrategies: string[]; // Aileye düşen görevler
+  reviewDate: string; // Tekrar değerlendirme tarihi önerisi
+}
+
+export interface EducationPlan {
+  id: string;
+  studentId: string;
+  teacherId: string;
+  screeningId: string; // Hangi taramaya dayanarak oluşturuldu
+  content: EducationPlanContent;
+  createdAt: string;
+}
+
 // Eski UserProfile tipini geriye dönük uyumluluk veya formlarda kullanım için Student tipine benzer tutuyoruz
 export interface UserProfile extends Omit<Student, 'id'> {
   role: Role; // Testi çözen kişinin rolü

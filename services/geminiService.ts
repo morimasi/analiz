@@ -1,17 +1,24 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { ScreeningResult, CATEGORY_LABELS } from '../types';
+import { ScreeningResult, CATEGORY_LABELS, EducationPlanContent } from '../types';
+
+// Ortak AI Client kurulumu
+const getAiClient = () => {
+  if (!process.env.API_KEY) {
+    console.error("API Key missing");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+}
 
 export const generateAnalysis = async (result: ScreeningResult, role: string, age: number): Promise<{ letter: string, actionSteps: string[] }> => {
   
-  if (!process.env.API_KEY) {
-    console.error("API Key missing");
+  const ai = getAiClient();
+  if (!ai) {
     return {
       letter: "API anahtarı eksik olduğu için analiz oluşturulamadı.",
       actionSteps: ["Lütfen sistem yöneticisiyle iletişime geçin."]
     };
   }
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   // Prepare data for prompt
   const riskSummary = Object.entries(result.categoryScores)
@@ -92,5 +99,90 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
       letter: "Üzgünüz, yapay zeka analizi şu anda oluşturulamadı. Lütfen raporu standart verilerle değerlendirin.",
       actionSteps: ["Bir uzmana danışın.", "Gözlem yapmaya devam edin.", "Okul rehberlik servisiyle görüşün."]
     };
+  }
+};
+
+export const generateEducationPlan = async (result: ScreeningResult, age: number): Promise<EducationPlanContent | null> => {
+  const ai = getAiClient();
+  if (!ai) return null;
+
+  const findings = Object.values(result.categoryScores)
+    .flatMap(s => s.findings)
+    .join(', ');
+
+  const highRiskAreas = Object.entries(result.categoryScores)
+    .filter(([_, val]) => val.riskLevel === 'high')
+    .map(([key, _]) => CATEGORY_LABELS[key as keyof typeof CATEGORY_LABELS])
+    .join(', ');
+
+  const prompt = `
+    GÖREV: Bireyselleştirilmiş Eğitim Planı (BEP) Hazırlama
+    ROL: Kıdemli Özel Eğitim Uzmanı ve Eğitim Programcısı
+    
+    ÖĞRENCİ PROFİLİ:
+    - Adı: ${result.studentName}
+    - Yaş: ${age}
+    - Riskli Alanlar: ${highRiskAreas || "Genel Gelişim Desteği"}
+    - Kritik Bulgular: ${findings || "Genel performans düşüklüğü"}
+
+    Bu öğrenci için okulda ve destek eğitim odasında uygulanmak üzere, tamamen tespit edilen bulgulara yönelik "Ultra Detaylı ve Profesyonel" bir eğitim planı oluştur.
+
+    Plan şu yapıda olmalıdır (JSON):
+    1. summary: Öğrencinin eğitsel ihtiyaçlarını özetleyen pedagojik bir paragraf (akademik dil).
+    2. goals: En az 3 adet hedef. Her hedef için alan (örn: Okuma), kısa vadeli hedef (1 ay) ve uzun vadeli hedef (6 ay) belirt.
+    3. activities: En az 4 adet somut etkinlik. Her etkinlik için; başlık, açıklama, süre (dk), sıklık (haftada kaç gün), materyaller ve yöntem. Etkinlikler doğrudan "b/d karıştırma", "dikkat süresi" gibi spesifik sorunlara çözüm olmalı.
+    4. familyStrategies: Ailenin evde uygulayacağı 3 strateji.
+    5. reviewDate: "3 Ay Sonra" veya "6 Ay Sonra" gibi bir öneri.
+
+    Çıktı dili: Türkçe.
+    Ton: Resmi, akademik, yönlendirici ve umut verici.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            summary: { type: Type.STRING },
+            goals: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  area: { type: Type.STRING },
+                  shortTerm: { type: Type.STRING },
+                  longTerm: { type: Type.STRING }
+                }
+              }
+            },
+            activities: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  duration: { type: Type.STRING },
+                  frequency: { type: Type.STRING },
+                  materials: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  method: { type: Type.STRING }
+                }
+              }
+            },
+            familyStrategies: { type: Type.ARRAY, items: { type: Type.STRING } },
+            reviewDate: { type: Type.STRING }
+          }
+        }
+      }
+    });
+
+    return JSON.parse(response.text as string);
+  } catch (error) {
+    console.error("Plan Generation Error:", error);
+    return null;
   }
 };

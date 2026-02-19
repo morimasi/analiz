@@ -9,6 +9,7 @@
 -- ============================================================================
 
 -- 1. TEMİZLİK (Dikkat: Varolan verileri siler)
+DROP TABLE IF EXISTS education_plans CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS screenings CASCADE;
 DROP TABLE IF EXISTS students CASCADE;
@@ -69,12 +70,23 @@ CREATE TABLE messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- E. EĞİTİM PLANLARI (EDUCATION PLANS - BEP)
+CREATE TABLE education_plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    screening_id UUID REFERENCES screenings(id) ON DELETE SET NULL,
+    content JSONB NOT NULL, -- Hedefler, aktiviteler, süreler burada tutulur
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 4. İNDEKSLER (Performans için)
 CREATE INDEX idx_students_parent_id ON students(parent_id);
 CREATE INDEX idx_students_teacher_id ON students(teacher_id);
 CREATE INDEX idx_screenings_student_id ON screenings(student_id);
 CREATE INDEX idx_messages_receiver_id ON messages(receiver_id);
 CREATE INDEX idx_messages_sender_id ON messages(sender_id);
+CREATE INDEX idx_education_plans_student_id ON education_plans(student_id);
 
 -- ============================================================================
 -- 5. SEED DATA (BAŞLANGIÇ VERİLERİ)
@@ -98,7 +110,6 @@ INSERT INTO messages (sender_id, receiver_id, content, is_read, created_at) VALU
 ('b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Merhaba, Can''ın okuma hızında son haftalarda artış gözlemliyorum, evdeki çalışmalarınız işe yarıyor.', FALSE, NOW() - INTERVAL '2 days');
 
 -- D. ÖRNEK TARAMA SONUCU (RAPOR) EKLE
--- Can Yılmaz için bir rapor
 INSERT INTO screenings (student_id, completed_by_role, total_score, category_scores, ai_analysis, date) VALUES
 (
     'd3eebc99-9c0b-4ef8-bb6d-6bb9bd380d44', 

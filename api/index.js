@@ -232,5 +232,55 @@ app.post('/api/messages', async (req, res) => {
   }
 });
 
+// 5. EDUCATION PLANS
+app.get('/api/education-plans', async (req, res) => {
+  const { studentId } = req.query;
+  try {
+    // Sadece bir öğrenciye ait planları getir
+    const result = await pool.query(
+      'SELECT * FROM education_plans WHERE student_id = $1 ORDER BY created_at DESC',
+      [studentId]
+    );
+    
+    const formattedRows = result.rows.map(row => ({
+      id: row.id,
+      studentId: row.student_id,
+      teacherId: row.teacher_id,
+      screeningId: row.screening_id,
+      content: row.content, // JSONB otomatik
+      createdAt: row.created_at
+    }));
+
+    res.json(formattedRows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/education-plans', async (req, res) => {
+  const { studentId, teacherId, screeningId, content } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO education_plans (student_id, teacher_id, screening_id, content) VALUES ($1, $2, $3, $4) RETURNING *',
+      [studentId, teacherId, screeningId, content]
+    );
+    
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      studentId: row.student_id,
+      teacherId: row.teacher_id,
+      screeningId: row.screening_id,
+      content: row.content,
+      createdAt: row.created_at
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // Vercel için app'i dışa aktarıyoruz, listen YAPMIYORUZ.
 export default app;
