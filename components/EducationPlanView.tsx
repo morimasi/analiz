@@ -5,29 +5,42 @@ import { api } from '../services/db';
 import { 
   BookOpen, Target, Clock, Calendar, CheckSquare, 
   Printer, Save, Sparkles, AlertTriangle, User, 
-  ChevronDown, ChevronUp, Layout, ClipboardList, Loader2
+  ChevronDown, ChevronUp, Layout, ClipboardList, Loader2, Download
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 interface EducationPlanViewProps {
   student: Student;
-  screeningResult: ScreeningResult; // Planın dayanağı olan rapor
-  teacherId: string;
+  teacherId?: string; // Sadece oluştururken gerekli
+  screeningResult?: ScreeningResult; // Oluştururken gerekli
+  preLoadedPlan?: EducationPlan; // Arşivden geliyorsa bu dolu olacak
   onBack: () => void;
+  userRole?: string; // Veli ise kaydet butonu çıkmaz vs.
 }
 
-const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screeningResult, teacherId, onBack }) => {
-  const [plan, setPlan] = useState<EducationPlanContent | null>(null);
+const EducationPlanView: React.FC<EducationPlanViewProps> = ({ 
+  student, 
+  screeningResult, 
+  teacherId, 
+  onBack, 
+  preLoadedPlan,
+  userRole
+}) => {
+  const [plan, setPlan] = useState<EducationPlanContent | null>(preLoadedPlan?.content || null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [existingPlanId, setExistingPlanId] = useState<string | null>(null);
-  const [activeAccordion, setActiveAccordion] = useState<number | null>(0);
+  const [existingPlanId, setExistingPlanId] = useState<string | null>(preLoadedPlan?.id || null);
 
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Load existing plan if any
+  // Load existing plan if NOT preloaded and we have screening result
   useEffect(() => {
+    if (preLoadedPlan) return;
+    if (!screeningResult) return;
+
     const loadPlan = async () => {
-      const plans = await api.plans.list(student.id);
+      const plans = await api.plans.list(teacherId || '', 'teacher', student.id); // Rol checkini atlamak için studentId gönderiyoruz
       // Bu tarama sonucuna ait bir plan var mı?
       const match = plans.find(p => p.screeningId === screeningResult.id);
       if (match) {
@@ -36,9 +49,10 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
       }
     };
     loadPlan();
-  }, [student.id, screeningResult.id]);
+  }, [student.id, screeningResult, preLoadedPlan, teacherId]);
 
   const handleGenerate = async () => {
+    if (!screeningResult) return;
     setLoading(true);
     const content = await generateEducationPlan(screeningResult, student.age);
     if (content) {
@@ -50,7 +64,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
   };
 
   const handleSave = async () => {
-    if (!plan) return;
+    if (!plan || !teacherId || !screeningResult) return;
     setSaving(true);
     try {
       await api.plans.save({
@@ -60,7 +74,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
         content: plan
       });
       alert("Eğitim planı başarıyla kaydedildi.");
-      setExistingPlanId("saved-now"); // Basitçe kaydedildiğini işaretlemek için
+      setExistingPlanId("saved-now"); 
     } catch (error) {
       alert("Kaydetme başarısız.");
     } finally {
@@ -72,7 +86,48 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
     window.print();
   };
 
+  const handleDownloadPDF = async () => {
+    if (!printRef.current) return;
+    
+    // Geçici olarak print stilini zorla uygula
+    const element = printRef.current;
+    
+    try {
+      // Yükleme animasyonu gösterilebilir burada
+      const canvas = await html2canvas(element, {
+        scale: 2, // Yüksek çözünürlük için
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight) * 0.95; // Biraz margin bırak
+      
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 10; 
+
+      // Çok uzun sayfalar için basit tek sayfa mantığı (Geliştirilebilir: multi-page)
+      // Şimdilik sığdırıyoruz
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, (imgHeight * pdfWidth) / imgWidth);
+      pdf.save(`BEP_${student.name.replace(/\s+/g, '_')}.pdf`);
+
+    } catch (error) {
+      console.error("PDF Hatası:", error);
+      alert("PDF oluşturulurken bir hata oluştu. Lütfen 'Yazdır' seçeneğini deneyiniz.");
+    }
+  };
+
+  // 1. Durum: Plan henüz yok, oluşturma ekranı (Sadece Öğretmen Görür)
   if (!plan && !loading) {
+    if (!screeningResult) return <div>Veri eksik.</div>;
+
     return (
       <div className="max-w-4xl mx-auto p-8 animate-fade-in">
         <button onClick={onBack} className="mb-6 text-gray-500 hover:text-gray-800 flex items-center gap-2">
@@ -88,24 +143,6 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
             Öğrenciniz <strong>{student.name}</strong> için, son tarama sonuçlarına ve tespit edilen klinik bulgulara dayalı, ultra detaylı bir eğitim rotası oluşturun.
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto mb-10 text-left">
-             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <Target className="w-5 h-5 text-indigo-600 mb-2" />
-                <h4 className="font-bold text-gray-800 text-sm">Akıllı Hedefler</h4>
-                <p className="text-xs text-gray-500">Kısa ve uzun vadeli, ölçülebilir kazanımlar.</p>
-             </div>
-             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <Layout className="w-5 h-5 text-purple-600 mb-2" />
-                <h4 className="font-bold text-gray-800 text-sm">Yapılandırılmış Etkinlikler</h4>
-                <p className="text-xs text-gray-500">Süre, materyal ve yöntem detaylı aktiviteler.</p>
-             </div>
-             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <User className="w-5 h-5 text-green-600 mb-2" />
-                <h4 className="font-bold text-gray-800 text-sm">Aile Katılımı</h4>
-                <p className="text-xs text-gray-500">Evde uygulanabilir destek stratejileri.</p>
-             </div>
-          </div>
-
           <button 
             onClick={handleGenerate}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-10 rounded-xl transition shadow-xl shadow-indigo-200 flex items-center gap-3 mx-auto text-lg transform active:scale-95"
@@ -118,6 +155,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
     );
   }
 
+  // 2. Durum: Yükleniyor
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
@@ -128,6 +166,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
     );
   }
 
+  // 3. Durum: Plan Görüntüleme (Oluşturulduktan Sonra veya Arşivden)
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 pb-24">
       {/* Control Bar */}
@@ -136,7 +175,8 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
            &larr; <span className="hidden md:inline">Geri</span>
         </button>
         <div className="flex gap-3">
-           {!existingPlanId && (
+           {/* Kaydet butonu sadece öğretmen rolü varsa, plan yeni oluşturulmuşsa ve henüz kaydedilmemişse görünür */}
+           {!existingPlanId && userRole === 'teacher' && (
              <button 
                onClick={handleSave} 
                disabled={saving}
@@ -147,16 +187,22 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
              </button>
            )}
            <button 
+             onClick={handleDownloadPDF}
+             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition shadow-md"
+           >
+             <Download className="w-4 h-4" /> PDF İndir
+           </button>
+           <button 
              onClick={handlePrint}
              className="flex items-center gap-2 px-5 py-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-bold transition shadow-md"
            >
-             <Printer className="w-4 h-4" /> Yazdır / PDF
+             <Printer className="w-4 h-4" /> Yazdır
            </button>
         </div>
       </div>
 
       {/* Plan Document */}
-      <div ref={printRef} className="bg-white rounded-none md:rounded-2xl shadow-xl overflow-hidden print:shadow-none">
+      <div id="print-area" ref={printRef} className="bg-white rounded-none md:rounded-2xl shadow-xl overflow-hidden print:shadow-none print:w-full print:absolute print:top-0 print:left-0 print:m-0">
         
         {/* Header Section */}
         <div className="bg-slate-900 text-white p-8 md:p-12 print:bg-white print:text-black print:border-b-2 print:border-black">
@@ -165,7 +211,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
                 <h1 className="text-3xl font-serif font-bold mb-2">Bireyselleştirilmiş Eğitim Planı</h1>
                 <p className="text-slate-400 print:text-gray-500 uppercase tracking-widest text-xs font-semibold">MindScreen AI • Klinik Eğitim Modülü</p>
              </div>
-             <div className="text-right hidden md:block">
+             <div className="text-right hidden md:block print:block">
                 <div className="text-2xl font-bold">{new Date().toLocaleDateString('tr-TR')}</div>
                 <div className="text-slate-400 print:text-gray-500 text-sm">Plan Tarihi</div>
              </div>
@@ -204,14 +250,14 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({ student, screenin
              </p>
           </section>
 
-          {/* 2. Goals (Accordion style for digital, Expanded for print) */}
+          {/* 2. Goals */}
           <section>
              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2 border-b border-gray-200 pb-2">
                <Target className="w-6 h-6 text-red-600" /> Hedefler ve Beklenen Kazanımlar
              </h3>
              <div className="grid grid-cols-1 gap-4">
                 {plan?.goals.map((goal, idx) => (
-                  <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-300 transition bg-slate-50">
+                  <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden bg-slate-50 print:break-inside-avoid">
                      <div className="bg-white p-5 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-2">
                         <span className="font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full text-sm w-fit">{goal.area}</span>
                         <span className="text-gray-400 text-xs font-medium uppercase">Hedef No: #{idx + 1}</span>

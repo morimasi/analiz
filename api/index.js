@@ -234,20 +234,41 @@ app.post('/api/messages', async (req, res) => {
 
 // 5. EDUCATION PLANS
 app.get('/api/education-plans', async (req, res) => {
-  const { studentId } = req.query;
+  const { studentId, userId, role } = req.query;
   try {
-    // Sadece bir öğrenciye ait planları getir
-    const result = await pool.query(
-      'SELECT * FROM education_plans WHERE student_id = $1 ORDER BY created_at DESC',
-      [studentId]
-    );
+    let query = `
+      SELECT ep.*, s.name as "studentName" 
+      FROM education_plans ep
+      JOIN students s ON ep.student_id = s.id
+    `;
+    let params = [];
+
+    // Filtreleme Mantığı
+    if (studentId) {
+      // Tekil öğrenci için (eski mantık korunuyor)
+      query += ' WHERE ep.student_id = $1';
+      params = [studentId];
+    } else if (role === 'teacher') {
+      // Öğretmen: Kendisinin oluşturduğu veya kendi öğrencisine ait olan planlar
+      query += ' WHERE ep.teacher_id = $1 OR s.teacher_id = $1';
+      params = [userId];
+    } else if (role === 'parent') {
+      // Veli: Sadece kendi çocuğuna ait planlar
+      query += ' WHERE s.parent_id = $1';
+      params = [userId];
+    }
+
+    query += ' ORDER BY ep.created_at DESC';
+
+    const result = await pool.query(query, params);
     
     const formattedRows = result.rows.map(row => ({
       id: row.id,
       studentId: row.student_id,
+      studentName: row.studentName, // Join ile gelen isim
       teacherId: row.teacher_id,
       screeningId: row.screening_id,
-      content: row.content, // JSONB otomatik
+      content: row.content,
       createdAt: row.created_at
     }));
 
@@ -281,6 +302,5 @@ app.post('/api/education-plans', async (req, res) => {
   }
 });
 
-
-// Vercel için app'i dışa aktarıyoruz, listen YAPMIYORUZ.
+// Vercel için app'i dışa aktarıyoruz
 export default app;

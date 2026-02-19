@@ -4,15 +4,11 @@ import { User, Student, ScreeningResult, Role, Message, EducationPlan } from '..
   =============================================================================
   API CLIENT (FRONTEND)
   =============================================================================
-  Bu modül, Vite Proxy üzerinden çalışan Express Backend sunucusuna (/api)
-  istek atar.
 */
 
 const KEYS = {
   CURRENT_USER: 'mindscreen_current_user',
 };
-
-// --- API INTERFACE ---
 
 export const api = {
   
@@ -32,8 +28,6 @@ export const api = {
         }
 
         const user = await response.json();
-        // Oturum durumunu client-side'da tutmak için localStorage kullanıyoruz
-        // Ancak veriler artık DB'den geliyor.
         localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(user));
         return user;
       } catch (e) {
@@ -75,11 +69,6 @@ export const api = {
       const response = await fetch(`/api/students?userId=${userId}&role=${role}`);
       if (!response.ok) return [];
       
-      // Backend snake_case dönebilir, frontend camelCase bekliyor.
-      // Ancak server.js'de dönüşüm yapmazsak burada maplememiz gerekebilir.
-      // Server.js'de basit SELECT * yaptığımız için, frontend tiplerini 
-      // DB kolon isimlerine (camelCase -> snake_case) uyarlamak veya burada maplemek gerekir.
-      // En temizi burada maplemek:
       const rows = await response.json();
       return rows.map((r: any) => ({
         id: r.id,
@@ -119,7 +108,7 @@ export const api = {
     }
   },
 
-  // SCREENINGS (REPORTS)
+  // SCREENINGS
   screenings: {
     save: async (result: ScreeningResult): Promise<ScreeningResult> => {
       const response = await fetch('/api/screenings', {
@@ -167,8 +156,12 @@ export const api = {
 
   // EDUCATION PLANS (BEP)
   plans: {
-    list: async (studentId: string): Promise<EducationPlan[]> => {
-      const response = await fetch(`/api/education-plans?studentId=${studentId}`);
+    // userId ve role ekledik, studentId opsiyonel oldu
+    list: async (userId: string, role: Role, studentId?: string): Promise<(EducationPlan & { studentName?: string })[]> => {
+      let url = `/api/education-plans?userId=${userId}&role=${role}`;
+      if (studentId) url = `/api/education-plans?studentId=${studentId}`; // Geriye dönük uyumluluk veya spesifik filtreleme
+      
+      const response = await fetch(url);
       if (!response.ok) return [];
       return await response.json();
     },

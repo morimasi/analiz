@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { User, Student, ScreeningResult, Message } from '../types';
+import { User, Student, ScreeningResult, Message, EducationPlan } from '../types';
 import { api } from '../services/db';
 import ArchiveView from './ArchiveView';
 import AnalyticsView from './AnalyticsView';
-import EducationPlanView from './EducationPlanView'; // Yeni Modül Import
+import EducationPlanView from './EducationPlanView'; 
+import PlanArchive from './PlanArchive'; // YENİ COMPONENT
 import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen, ClipboardList } from 'lucide-react';
 
 interface DashboardProps {
@@ -13,7 +14,7 @@ interface DashboardProps {
   onViewReport: (report: ScreeningResult, student: Student) => void;
 }
 
-type Tab = 'overview' | 'students' | 'messages' | 'archive' | 'analytics' | 'education_plan';
+type Tab = 'overview' | 'students' | 'messages' | 'archive' | 'analytics' | 'education_plan' | 'plan_archive';
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening, onViewReport }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -22,10 +23,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   const [students, setStudents] = useState<Student[]>([]);
   const [recentReports, setRecentReports] = useState<(ScreeningResult & { studentName: string })[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [allPlans, setAllPlans] = useState<(EducationPlan & { studentName?: string })[]>([]);
   
   // Eğitim Planı için State
   const [planTargetStudent, setPlanTargetStudent] = useState<Student | null>(null);
   const [planTargetScreening, setPlanTargetScreening] = useState<ScreeningResult | null>(null);
+  const [planToView, setPlanToView] = useState<EducationPlan | null>(null); // Arşivden seçilen plan
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newStudent, setNewStudent] = useState({ name: '', age: '', grade: '', gender: 'male' });
@@ -39,15 +42,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   const loadData = async () => {
     setLoading(true);
     try {
-      const [fetchedStudents, fetchedReports, fetchedMessages] = await Promise.all([
+      // Paralel veri çekimi
+      const [fetchedStudents, fetchedReports, fetchedMessages, fetchedPlans] = await Promise.all([
         api.students.list(user.id, user.role),
         api.screenings.listByUser(user.id, user.role),
-        api.messages.list(user.id)
+        api.messages.list(user.id),
+        // Yeni: Kullanıcının tüm planlarını çek
+        api.plans.list(user.id, user.role)
       ]);
       
       setStudents(fetchedStudents);
       setRecentReports(fetchedReports);
       setMessages(fetchedMessages);
+      setAllPlans(fetchedPlans);
     } catch (e) {
       console.error("Veri yüklenemedi", e);
     } finally {
@@ -120,14 +127,30 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
     }
   };
 
-  // Yeni Fonksiyon: Eğitim Planı Başlatma
-  const handleOpenEducationPlan = (report: ScreeningResult) => {
+  // Yeni Fonksiyon: Eğitim Planı OLUŞTURMA (Öğretmen için, Rapordan gelir)
+  const handleCreateEducationPlan = (report: ScreeningResult) => {
     const student = students.find(s => s.id === report.studentId);
     if (student) {
       setPlanTargetStudent(student);
       setPlanTargetScreening(report);
+      setPlanToView(null); // Yeni oluşturuluyor, var olanı görüntülemiyoruz
       setActiveTab('education_plan');
     }
+  };
+
+  // Yeni Fonksiyon: Arşivden Plan GÖRÜNTÜLEME
+  const handleViewArchivedPlan = (plan: EducationPlan) => {
+    const student = students.find(s => s.id === plan.studentId) || { 
+       id: plan.studentId, 
+       name: (plan as any).studentName || 'Öğrenci', 
+       age: 0, 
+       grade: '?' 
+    } as Student;
+
+    setPlanTargetStudent(student);
+    setPlanToView(plan);
+    setPlanTargetScreening(null); // Rapor verisine ihtiyacımız yok, plan zaten var
+    setActiveTab('education_plan');
   };
 
   const getRiskColor = (score: number) => {
@@ -182,7 +205,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   onClick={() => setActiveTab('archive')} 
                   className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  <FolderOpen className="w-4 h-4"/> Arşiv
+                  <FolderOpen className="w-4 h-4"/> Rapor Arşivi
+                </button>
+                <button 
+                  onClick={() => setActiveTab('plan_archive')} 
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'plan_archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <ClipboardList className="w-4 h-4"/> BEP Arşivi
                 </button>
                 <button 
                   onClick={() => setActiveTab('analytics')} 
@@ -222,13 +251,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
-        {/* === TAB: EDUCATION PLAN (NEW) === */}
-        {activeTab === 'education_plan' && planTargetStudent && planTargetScreening && user.role === 'teacher' && (
+        {/* === TAB: EDUCATION PLAN (VIEW / CREATE) === */}
+        {activeTab === 'education_plan' && planTargetStudent && (
            <EducationPlanView 
              student={planTargetStudent}
-             screeningResult={planTargetScreening}
              teacherId={user.id}
-             onBack={() => setActiveTab('overview')}
+             screeningResult={planTargetScreening || undefined} // Sadece oluştururken dolu
+             preLoadedPlan={planToView || undefined} // Sadece görüntülerken dolu
+             onBack={() => {
+                // Geri dönünce hangi taba döneceğine karar ver
+                if (planToView) setActiveTab('plan_archive');
+                else setActiveTab('overview');
+             }}
+             userRole={user.role}
+           />
+        )}
+
+        {/* === TAB: PLAN ARCHIVE (NEW) === */}
+        {activeTab === 'plan_archive' && (
+           <PlanArchive 
+             plans={allPlans} 
+             onViewPlan={handleViewArchivedPlan} 
+             userRole={user.role}
            />
         )}
 
@@ -469,7 +513,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                         {/* ÖĞRETMEN İÇİN PLAN OLUŞTURMA BUTONU */}
                         {user.role === 'teacher' && (
                            <button 
-                             onClick={() => handleOpenEducationPlan(report)}
+                             onClick={() => handleCreateEducationPlan(report)}
                              className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition opacity-0 group-hover:opacity-100"
                              title="Bireyselleştirilmiş Eğitim Planı Oluştur"
                            >
