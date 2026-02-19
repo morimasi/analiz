@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, SchemaType } from "@google/genai";
 import { ScreeningResult, CATEGORY_LABELS, EducationPlanContent } from '../types';
 
 // Ortak AI Client kurulumu
@@ -10,6 +10,9 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 }
 
+// Model Yapılandırması
+const MODEL_NAME = 'gemini-3-flash-preview';
+
 export const generateAnalysis = async (result: ScreeningResult, role: string, age: number): Promise<{ letter: string, actionSteps: string[] }> => {
   
   const ai = getAiClient();
@@ -20,7 +23,7 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
     };
   }
 
-  // Prepare data for prompt
+  // Veri Hazırlığı
   const riskSummary = Object.entries(result.categoryScores)
     .map(([cat, data]) => `- ${CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS]}: %${data.score} (${data.riskLabel})`)
     .join('\n');
@@ -30,50 +33,53 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
     .map(f => `- ${f}`)
     .join('\n');
 
-  // Dynamic Persona and Context based on Role
+  // Rol ve Persona Ayarı
   const isTeacher = role === 'teacher';
   
   const systemPersona = isTeacher 
-    ? "Sen akademik dili güçlü, sınıf yönetimi ve kaynaştırma eğitimi konusunda uzman kıdemli bir Özel Eğitim Danışmanısın."
-    : "Sen şefkatli, aile dinamiklerini iyi bilen ve ebeveyn psikolojisinden anlayan kıdemli bir Çocuk Gelişim Uzmanısın.";
+    ? "Sen, öğrenme güçlükleri ve kapsayıcı eğitim konusunda 20 yıl deneyimli, akademik literatüre hakim kıdemli bir Özel Eğitim Danışmanısın."
+    : "Sen, çocuk psikolojisi ve aile danışmanlığı konusunda uzman, ebeveyn kaygılarını yönetebilen, empatik ve çözüm odaklı kıdemli bir Çocuk Gelişim Uzmanısın.";
 
-  const targetAudience = isTeacher
-    ? "sınıf öğretmenine"
-    : "endişeli bir ebeveyne";
+  const targetAudience = isTeacher ? "sınıf öğretmenine" : "endişeli bir ebeveyne";
 
   const adviceContext = isTeacher
-    ? "Öğrencinin sınıf içi performansını artıracak akademik uyarlamalar, akran iletişimi ve öğretim materyali düzenlemeleri öner."
-    : "Ev ortamında uygulanabilecek basit oyunlar, günlük rutin düzenlemeleri ve duygusal destek stratejileri öner.";
+    ? "Sınıf içi uyarlamalar, öğretim materyali farklılaştırma ve akran iletişimi stratejileri."
+    : "Ev ortamında uygulanabilecek oyunlar, rutinler ve duygusal destek yöntemleri.";
 
   const prompt = `
-    ÖĞRENCİ: ${result.studentName}, ${age} yaşında.
-    HEDEF KİTLE: ${targetAudience} (${isTeacher ? 'Öğretmen' : 'Ebeveyn'})
+    GÖREV TANIMI:
+    Aşağıdaki öğrenci profilini ve tarama sonuçlarını derinlemesine analiz et. Standart bir rapor yerine, öğrencinin özgün ihtiyaçlarına odaklanan, içgörü dolu bir değerlendirme yap.
+    
+    ÖĞRENCİ PROFİLİ:
+    - İsim: ${result.studentName}
+    - Yaş: ${age}
+    - Hedef Kitle: ${targetAudience}
 
-    TARAMA SONUÇLARI (Risk Analizi):
+    TARAMA SONUÇLARI:
     ${riskSummary}
 
-    TESPİT EDİLEN KRİTİK BULGULAR (Semptomlar):
-    ${allFindings || "Belirgin bir kritik semptom işaretlenmemiştir."}
+    KLİNİK BULGULAR (Semptomlar):
+    ${allFindings || "Belirgin bir kritik semptom işaretlenmemiştir, ancak genel gelişim takibi önerilir."}
 
-    GÖREV:
-    ${systemPersona}
-    Bu verilere dayanarak;
-
-    1. "letter": Durumu özetleyen bir mektup yaz (Maksimum 150 kelime). 
-       - Tıbbi teşhis KOYMA (Disleksi var deme, "okuma alanında destek ihtiyacı görünüyor" de).
-       - ${isTeacher ? 'Profesyonel ve işbirlikçi bir dil kullan.' : 'Empatik, umut verici ve sakinleştirici bir dil kullan.'}
+    İSTENEN ÇIKTI (JSON):
+    1. "letter": ${targetAudience} hitaben yazılmış profesyonel bir mektup. 
+       - Durumu net ama umut verici bir dille özetle.
+       - Asla tıbbi bir tanı (Disleksi, DEHB vb.) koyma; "risk belirtileri", "destek ihtiyacı" gibi ifadeler kullan.
+       - ${isTeacher ? 'Pedagojik terimler ve işbirlikçi bir ton kullan.' : 'Sıcak, anlaşılır ve motive edici bir ton kullan.'}
     
-    2. "actionSteps": ${adviceContext} (3 adet somut madde).
-
-    JSON formatında yanıt ver.
+    2. "actionSteps": ${adviceContext} odaklı 3 adet somut, uygulanabilir öneri. Genel geçer tavsiyeler yerine, yukarıdaki bulgulara (örneğin b/d karıştırma varsa ona özel) yönelik nokta atışı stratejiler ver.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: MODEL_NAME,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
+        // Thinking Config: Düşünme bütçesi ayırıyoruz
+        thinkingConfig: { thinkingBudget: 2048 }, 
+        // Max Output: Düşünme + JSON çıktısı için yeterli alan (Thinking bütçesinden fazla olmalı)
+        maxOutputTokens: 8192, 
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -89,15 +95,15 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response text");
+    if (!text) throw new Error("AI boş yanıt döndürdü.");
 
     return JSON.parse(text);
 
   } catch (error) {
-    console.error("Gemini Error:", error);
+    console.error("Gemini Analysis Error:", error);
     return {
-      letter: "Üzgünüz, yapay zeka analizi şu anda oluşturulamadı. Lütfen raporu standart verilerle değerlendirin.",
-      actionSteps: ["Bir uzmana danışın.", "Gözlem yapmaya devam edin.", "Okul rehberlik servisiyle görüşün."]
+      letter: "Analiz servisinde geçici bir yoğunluk yaşanıyor. Ancak sonuçlara dayanarak, öğrencinin özellikle zorlandığı alanlarda (kırmızı ile işaretli) bireysel destek alması faydalı olacaktır.",
+      actionSteps: ["Bir çocuk psikiyatristi veya rehberlik servisi ile görüşün.", "Çocuğun güçlü yönlerini (yeşil alanlar) öne çıkararak motivasyonunu artırın.", "Okuma ve dikkat çalışmalarını kısa sürelerle (15-20 dk) sık sık yapın."]
     };
   }
 };
@@ -116,34 +122,40 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
     .join(', ');
 
   const prompt = `
-    GÖREV: Bireyselleştirilmiş Eğitim Planı (BEP) Hazırlama
-    ROL: Kıdemli Özel Eğitim Uzmanı ve Eğitim Programcısı
+    GÖREV: Bireyselleştirilmiş Eğitim Planı (BEP) Oluşturma
+    ROL: Sen, nöropsikoloji ve özel eğitim alanında uzmanlaşmış, öğrenme süreçlerini çok iyi analiz eden kıdemli bir Eğitim Programcısısın.
     
-    ÖĞRENCİ PROFİLİ:
-    - Adı: ${result.studentName}
-    - Yaş: ${age}
-    - Riskli Alanlar: ${highRiskAreas || "Genel Gelişim Desteği"}
-    - Kritik Bulgular: ${findings || "Genel performans düşüklüğü"}
+    VERİLER:
+    - Öğrenci: ${result.studentName} (${age} Yaş)
+    - Öncelikli Müdahale Alanları: ${highRiskAreas || "Genel Akademik Destek"}
+    - Tespit Edilen Spesifik Sorunlar: ${findings || "Genel dikkat ve motivasyon düşüklüğü"}
 
-    Bu öğrenci için okulda ve destek eğitim odasında uygulanmak üzere, tamamen tespit edilen bulgulara yönelik "Ultra Detaylı ve Profesyonel" bir eğitim planı oluştur.
+    TALİMATLAR:
+    Bu öğrenci için okulda ve destek eğitim odasında uygulanmak üzere kapsamlı bir plan hazırla.
+    Planı oluştururken "Düşünme Süreci"ni (Thinking Process) kullanarak şu adımları izle:
+    1. Öğrencinin yaşına ve gelişim dönemine uygun hedefler belirle.
+    2. Tespit edilen her bir soruna (örn: 'b/d karıştırma') karşılık gelen bilimsel bir müdahale yöntemi seç.
+    3. Etkinlikleri 'oyunlaştırılmış' ve 'yapılandırılmış' olarak dengele.
+    4. Aileyi sürece dahil edecek gerçekçi görevler tanımla.
 
-    Plan şu yapıda olmalıdır (JSON):
-    1. summary: Öğrencinin eğitsel ihtiyaçlarını özetleyen pedagojik bir paragraf (akademik dil).
-    2. goals: En az 3 adet hedef. Her hedef için alan (örn: Okuma), kısa vadeli hedef (1 ay) ve uzun vadeli hedef (6 ay) belirt.
-    3. activities: En az 4 adet somut etkinlik. Her etkinlik için; başlık, açıklama, süre (dk), sıklık (haftada kaç gün), materyaller ve yöntem. Etkinlikler doğrudan "b/d karıştırma", "dikkat süresi" gibi spesifik sorunlara çözüm olmalı.
-    4. familyStrategies: Ailenin evde uygulayacağı 3 strateji.
-    5. reviewDate: "3 Ay Sonra" veya "6 Ay Sonra" gibi bir öneri.
-
-    Çıktı dili: Türkçe.
-    Ton: Resmi, akademik, yönlendirici ve umut verici.
+    ÇIKTI FORMATI (JSON):
+    Aşağıdaki şemaya tam olarak uy.
+    - summary: Öğrencinin eğitsel ihtiyaçlarını ve pedagojik yaklaşımı özetleyen akademik bir paragraf.
+    - goals: En az 3 hedef (Alan, Kısa Vadeli, Uzun Vadeli).
+    - activities: En az 4 detaylı etkinlik (Başlık, Açıklama, Süre, Sıklık, Materyaller, Yöntem).
+    - familyStrategies: Evde uygulanacak 3 strateji.
+    - reviewDate: Önerilen değerlendirme tarihi.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: MODEL_NAME,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
+        // Thinking Config: BEP planı karmaşık olduğu için daha yüksek düşünme bütçesi
+        thinkingConfig: { thinkingBudget: 4096 },
+        maxOutputTokens: 12000, // Uzun çıktı için geniş alan
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -180,9 +192,14 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
       }
     });
 
-    return JSON.parse(response.text as string);
+    const text = response.text;
+    if (!text) throw new Error("AI Plan oluşturamadı (Boş yanıt).");
+
+    return JSON.parse(text);
   } catch (error) {
     console.error("Plan Generation Error:", error);
+    // Hata durumunda null dönmek yerine UI'da hata mesajı gösterebilmek için null dönüyoruz, 
+    // ancak konsola detayı basıyoruz. UI tarafı null kontrolü yapıyor.
     return null;
   }
 };
