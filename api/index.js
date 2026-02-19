@@ -194,6 +194,32 @@ app.post('/api/screenings', async (req, res) => {
   }
 });
 
+// 3.1 UPDATE SCREENING ANALYSIS (YENİ)
+app.put('/api/screenings/:id/analysis', async (req, res) => {
+  const { id } = req.params;
+  const { aiAnalysis } = req.body;
+  
+  try {
+    const result = await pool.query(
+      'UPDATE screenings SET ai_analysis = $1 WHERE id = $2 RETURNING *',
+      [JSON.stringify(aiAnalysis), id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Rapor bulunamadı' });
+    }
+
+    const row = result.rows[0];
+    res.json({
+       id: row.id,
+       aiAnalysis: row.ai_analysis
+    });
+  } catch (err) {
+    console.error("Analysis Update Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 4. MESSAGES
 app.get('/api/messages', async (req, res) => {
   const { userId } = req.query;

@@ -122,6 +122,16 @@ export const api = {
       return await response.json();
     },
 
+    // YENİ: Sadece analizi güncellemek için
+    updateAnalysis: async (id: string, aiAnalysis: any): Promise<void> => {
+        const response = await fetch(`/api/screenings/${id}/analysis`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aiAnalysis })
+        });
+        if (!response.ok) throw new Error('Analiz kaydedilemedi');
+    },
+
     listByUser: async (userId: string, role: Role): Promise<(ScreeningResult & { studentName: string })[]> => {
       const params = new URLSearchParams({ userId, role });
       const response = await fetch(`/api/screenings?${params.toString()}`);

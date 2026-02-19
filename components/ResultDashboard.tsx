@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ScreeningResult, CATEGORY_LABELS, EvaluationCategory, UserProfile } from '../types';
 import { generateAnalysis } from '../services/geminiService';
+import { api } from '../services/db';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import { Download, Sparkles, AlertTriangle, CheckCircle, Activity, Loader2, Share2, Printer } from 'lucide-react';
+import { Download, Sparkles, AlertTriangle, CheckCircle, Activity, Loader2, Share2, Printer, Save } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -16,6 +17,19 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ result, profile }) =>
   const [loadingAI, setLoadingAI] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
+  // Initialize with existing analysis from DB if available
+  useEffect(() => {
+    if (result.aiAnalysis) {
+       // Ensure it's treated as an object even if DB returns different format
+       const existing = typeof result.aiAnalysis === 'string' 
+          ? JSON.parse(result.aiAnalysis) 
+          : result.aiAnalysis;
+       setAnalysis(existing);
+    } else {
+       setAnalysis(null);
+    }
+  }, [result]);
+
   // Prepare data for Radar Chart
   const chartData = Object.entries(result.categoryScores).map(([key, data]) => ({
     subject: CATEGORY_LABELS[key as EvaluationCategory],
@@ -26,7 +40,21 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ result, profile }) =>
   const handleGenerateAI = async () => {
     setLoadingAI(true);
     const aiResult = await generateAnalysis(result, profile.role, profile.age);
-    setAnalysis(aiResult);
+    
+    if (aiResult) {
+       setAnalysis(aiResult);
+       
+       // Veritabanına kaydet
+       if (result.id) {
+         try {
+           await api.screenings.updateAnalysis(result.id, aiResult);
+           console.log("Analiz veritabanına kaydedildi.");
+         } catch (e) {
+           console.error("Analiz kaydedilemedi:", e);
+           // Hata olsa bile UI'da gösteriyoruz, kritik değil
+         }
+       }
+    }
     setLoadingAI(false);
   };
 
@@ -41,7 +69,9 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ result, profile }) =>
       <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 no-print gap-4">
         <div className="text-center md:text-left">
            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Analiz Raporu</h2>
-           <p className="text-sm text-gray-500">Sonuçlar başarıyla hesaplandı.</p>
+           <p className="text-sm text-gray-500">
+             {analysis ? "Rapor ve uzman görüşü hazır." : "Sonuçlar hesaplandı, detaylı analiz bekleniyor."}
+           </p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <button 
@@ -65,7 +95,7 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ result, profile }) =>
               <div className="flex flex-wrap gap-2 md:gap-4 mt-2 text-slate-300 print:text-gray-600 text-xs md:text-sm font-medium">
                 <span className="bg-white/10 print:bg-gray-100 px-3 py-1 rounded-full">Yaş: {profile.age}</span>
                 <span className="bg-white/10 print:bg-gray-100 px-3 py-1 rounded-full">Sınıf: {profile.grade}</span>
-                <span className="bg-white/10 print:bg-gray-100 px-3 py-1 rounded-full">{new Date().toLocaleDateString('tr-TR')}</span>
+                <span className="bg-white/10 print:bg-gray-100 px-3 py-1 rounded-full">{new Date(result.date).toLocaleDateString('tr-TR')}</span>
               </div>
             </div>
             <div className="text-left md:text-right w-full md:w-auto bg-white/5 md:bg-transparent p-4 md:p-0 rounded-xl">
@@ -192,15 +222,17 @@ const ResultDashboard: React.FC<ResultDashboardProps> = ({ result, profile }) =>
            {loadingAI && (
              <div className="flex flex-col items-center justify-center py-16 text-indigo-600 bg-white rounded-2xl border border-gray-100 shadow-inner">
                <Loader2 className="w-8 h-8 md:w-10 md:h-10 animate-spin mb-4" />
-               <p className="text-sm md:text-base font-medium animate-pulse">Veriler işleniyor...</p>
+               <p className="text-sm md:text-base font-medium animate-pulse">
+                 Veriler analiz ediliyor ve kayıt oluşturuluyor...
+               </p>
              </div>
            )}
 
            {analysis && (
              <div className="animate-fade-in space-y-8">
                 <div className="bg-white p-6 md:p-8 rounded-2xl border border-indigo-100 shadow-sm relative print:border print:border-gray-300 mt-4">
-                  <div className="absolute -top-3 left-4 md:left-8 bg-indigo-600 text-white text-[10px] md:text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide shadow-md">
-                    Ebeveyn Bilgilendirme Notu
+                  <div className="absolute -top-3 left-4 md:left-8 bg-indigo-600 text-white text-[10px] md:text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide shadow-md flex items-center gap-1">
+                    <Save className="w-3 h-3" /> Ebeveyn Bilgilendirme Notu
                   </div>
                   <p className="text-gray-700 leading-relaxed text-base md:text-lg font-serif mt-2">
                     {analysis.letter}

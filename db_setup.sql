@@ -55,7 +55,7 @@ CREATE TABLE screenings (
     -- JSONB: Karmaşık verileri (kategori puanları, AI analizi) esnek tutmak için
     -- Frontend'deki 'categoryScores' ve 'aiAnalysis' objelerini burada saklarız.
     category_scores JSONB NOT NULL, 
-    ai_analysis JSONB,
+    ai_analysis JSONB, -- AI tarafından üretilen metin ve aksiyon adımları burada saklanır
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -110,6 +110,7 @@ INSERT INTO messages (sender_id, receiver_id, content, is_read, created_at) VALU
 ('b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Merhaba, Can''ın okuma hızında son haftalarda artış gözlemliyorum, evdeki çalışmalarınız işe yarıyor.', FALSE, NOW() - INTERVAL '2 days');
 
 -- D. ÖRNEK TARAMA SONUCU (RAPOR) EKLE
+-- Bu örnekte ai_analysis alanı DOLU olarak geliyor.
 INSERT INTO screenings (student_id, completed_by_role, total_score, category_scores, ai_analysis, date) VALUES
 (
     'd3eebc99-9c0b-4ef8-bb6d-6bb9bd380d44', 
