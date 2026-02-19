@@ -104,6 +104,28 @@ export const api = {
       };
     },
 
+    // YENİ: Öğrenci Güncelleme
+    update: async (id: string, student: Partial<Student>): Promise<Student> => {
+      const response = await fetch(`/api/students/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(student)
+      });
+      
+      if (!response.ok) throw new Error('Öğrenci güncellenemedi');
+      const r = await response.json();
+      return {
+        id: r.id,
+        parentId: r.parent_id || r.parentId,
+        teacherId: r.teacher_id || r.teacherId,
+        name: r.name,
+        age: r.age,
+        grade: r.grade,
+        gender: r.gender,
+        notes: r.notes
+      };
+    },
+
     delete: async (id: string) => {
       await fetch(`/api/students/${id}`, { method: 'DELETE' });
     }

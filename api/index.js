@@ -113,6 +113,25 @@ app.post('/api/students', async (req, res) => {
   }
 });
 
+// YENİ: Öğrenci Güncelleme (PUT)
+app.put('/api/students/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, age, grade, gender, notes } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE students SET name=$1, age=$2, grade=$3, gender=$4, notes=$5 WHERE id=$6 RETURNING *',
+      [name, age, grade, gender, notes, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Öğrenci bulunamadı' });
+    }
+    res.json(toCamelCase(result.rows)[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/students/:id', async (req, res) => {
   const { id } = req.params;
   try {

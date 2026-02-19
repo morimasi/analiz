@@ -4,8 +4,8 @@ import { api } from '../services/db';
 import ArchiveView from './ArchiveView';
 import AnalyticsView from './AnalyticsView';
 import EducationPlanView from './EducationPlanView'; 
-import PlanArchive from './PlanArchive'; // YENİ COMPONENT
-import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen, ClipboardList, Sparkles } from 'lucide-react';
+import PlanArchive from './PlanArchive';
+import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen, ClipboardList, Sparkles, Pencil } from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -28,10 +28,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   // Eğitim Planı için State
   const [planTargetStudent, setPlanTargetStudent] = useState<Student | null>(null);
   const [planTargetScreening, setPlanTargetScreening] = useState<ScreeningResult | null>(null);
-  const [planToView, setPlanToView] = useState<EducationPlan | null>(null); // Arşivden seçilen plan
+  const [planToView, setPlanToView] = useState<EducationPlan | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newStudent, setNewStudent] = useState({ name: '', age: '', grade: '', gender: 'male' });
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null); // Düzenleme modu için
+  const [studentFormData, setStudentFormData] = useState({ name: '', age: '', grade: '', gender: 'male', notes: '' });
   const [newMessage, setNewMessage] = useState({ to: '', content: '' });
 
   // Data Loading
@@ -71,31 +72,61 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
     }
   };
 
-  const handleAddStudent = async (e: React.FormEvent) => {
+  const openAddModal = () => {
+    setEditingStudentId(null);
+    setStudentFormData({ name: '', age: '', grade: '', gender: 'male', notes: '' });
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (student: Student) => {
+    setEditingStudentId(student.id);
+    setStudentFormData({
+        name: student.name,
+        age: student.age.toString(),
+        grade: student.grade,
+        gender: student.gender || 'male',
+        notes: student.notes || ''
+    });
+    setShowAddModal(true);
+  };
+
+  const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newStudent.name && newStudent.age && newStudent.grade) {
+    if (studentFormData.name && studentFormData.age && studentFormData.grade) {
       const studentData: any = {
-        name: newStudent.name,
-        age: Number(newStudent.age),
-        grade: newStudent.grade,
-        gender: newStudent.gender
+        name: studentFormData.name,
+        age: Number(studentFormData.age),
+        grade: studentFormData.grade,
+        gender: studentFormData.gender,
+        notes: studentFormData.notes
       };
 
-      if (user.role === 'parent') {
-        studentData.parentId = user.id;
-      } else {
-        studentData.teacherId = user.id;
+      try {
+        if (editingStudentId) {
+          // UPDATE
+          await api.students.update(editingStudentId, studentData);
+        } else {
+          // CREATE
+          if (user.role === 'parent') {
+            studentData.parentId = user.id;
+          } else {
+            studentData.teacherId = user.id;
+          }
+          await api.students.add(studentData);
+        }
+        
+        setShowAddModal(false);
+        setStudentFormData({ name: '', age: '', grade: '', gender: 'male', notes: '' });
+        setEditingStudentId(null);
+        loadData();
+      } catch (error) {
+        alert("İşlem sırasında bir hata oluştu.");
       }
-
-      await api.students.add(studentData);
-      setShowAddModal(false);
-      setNewStudent({ name: '', age: '', grade: '', gender: 'male' });
-      loadData();
     }
   };
 
   const handleDeleteStudent = async (id: string) => {
-    if (confirm("Öğrenci kaydını silmek istediğinize emin misiniz?")) {
+    if (confirm("Öğrenci kaydını ve ilgili tüm verileri silmek istediğinize emin misiniz?")) {
       await api.students.delete(id);
       loadData();
     }
@@ -136,18 +167,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
     }
   };
 
-  // Yeni Fonksiyon: Eğitim Planı OLUŞTURMA (Öğretmen için, Rapordan gelir)
   const handleCreateEducationPlan = (report: ScreeningResult) => {
     const student = students.find(s => s.id === report.studentId);
     if (student) {
       setPlanTargetStudent(student);
       setPlanTargetScreening(report);
-      setPlanToView(null); // Yeni oluşturuluyor, var olanı görüntülemiyoruz
+      setPlanToView(null);
       setActiveTab('education_plan');
     }
   };
 
-  // Yeni Fonksiyon: Arşivden Plan GÖRÜNTÜLEME
   const handleViewArchivedPlan = (plan: EducationPlan) => {
     const student = students.find(s => s.id === plan.studentId) || { 
        id: plan.studentId, 
@@ -158,7 +187,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
 
     setPlanTargetStudent(student);
     setPlanToView(plan);
-    setPlanTargetScreening(null); // Rapor verisine ihtiyacımız yok, plan zaten var
+    setPlanTargetScreening(null);
     setActiveTab('education_plan');
   };
 
@@ -210,12 +239,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                 >
                   Genel Bakış
                 </button>
-                <button 
-                  onClick={() => setActiveTab('archive')} 
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <FolderOpen className="w-4 h-4"/> Rapor Arşivi
-                </button>
+                
+                {/* VELİLER ARŞİVİ GÖREMEZ */}
+                {user.role !== 'parent' && (
+                  <button 
+                    onClick={() => setActiveTab('archive')} 
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <FolderOpen className="w-4 h-4"/> Rapor Arşivi
+                  </button>
+                )}
                 
                 {/* BEP Arşivi Sadece Öğretmen ve Yöneticiler İçin */}
                 {user.role !== 'parent' && (
@@ -266,15 +299,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
         {/* === TAB: EDUCATION PLAN (VIEW / CREATE) === */}
-        {/* Sadece Öğretmen ve Yönetici Görebilir */}
         {activeTab === 'education_plan' && planTargetStudent && user.role !== 'parent' && (
            <EducationPlanView 
              student={planTargetStudent}
              teacherId={user.id}
-             screeningResult={planTargetScreening || undefined} // Sadece oluştururken dolu
-             preLoadedPlan={planToView || undefined} // Sadece görüntülerken dolu
+             screeningResult={planTargetScreening || undefined}
+             preLoadedPlan={planToView || undefined}
              onBack={() => {
-                // Geri dönünce hangi taba döneceğine karar ver
                 if (planToView) setActiveTab('plan_archive');
                 else setActiveTab('overview');
              }}
@@ -282,8 +313,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
            />
         )}
 
-        {/* === TAB: PLAN ARCHIVE (NEW) === */}
-        {/* Sadece Öğretmen ve Yönetici Görebilir */}
+        {/* === TAB: PLAN ARCHIVE === */}
         {activeTab === 'plan_archive' && user.role !== 'parent' && (
            <PlanArchive 
              plans={allPlans} 
@@ -295,7 +325,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
         {/* === TAB: MESSAGES === */}
         {activeTab === 'messages' && user.role !== 'admin' && (
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px] animate-fade-in">
-              {/* Inbox List */}
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col shadow-sm">
                  <div className="p-4 border-b border-gray-100 bg-gray-50">
                     <h3 className="font-bold text-gray-800">Gelen Kutusu</h3>
@@ -317,7 +346,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                  </div>
               </div>
 
-              {/* Compose */}
               <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 flex flex-col shadow-sm">
                  <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <Send className="w-4 h-4 text-indigo-600" /> Yeni Mesaj Gönder
@@ -347,7 +375,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
         )}
 
         {/* === TAB: ARCHIVE === */}
-        {activeTab === 'archive' && (
+        {activeTab === 'archive' && user.role !== 'parent' && (
           <ArchiveView reports={recentReports} onViewReport={handleArchiveReportView} userRole={user.role} />
         )}
 
@@ -413,7 +441,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   {user.role === 'parent' ? 'Çocuklarım' : 'Öğrenci Listesi'}
                 </h3>
                 <button 
-                  onClick={() => setShowAddModal(true)}
+                  onClick={openAddModal}
                   className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition shadow-lg shadow-indigo-200 active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
@@ -429,7 +457,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   <h4 className="text-lg font-medium text-gray-900 mb-2">Henüz kayıt yok</h4>
                   <p className="text-gray-500 mb-6">Analiz yapmaya başlamak için önce profil ekleyin.</p>
                   <button 
-                    onClick={() => setShowAddModal(true)}
+                    onClick={openAddModal}
                     className="text-indigo-600 font-semibold hover:text-indigo-800"
                   >
                     + Yeni Kayıt Ekle
@@ -449,12 +477,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                             <p className="text-xs text-gray-500">{student.grade}. Sınıf • {student.age} Yaş</p>
                           </div>
                         </div>
-                        <button 
-                          onClick={() => handleDeleteStudent(student.id)}
-                          className="text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                            <button 
+                              onClick={() => openEditModal(student)}
+                              className="text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50 transition"
+                              title="Düzenle"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteStudent(student.id)}
+                              className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition"
+                              title="Sil"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
                       </div>
                       
                       {user.role !== 'admin' && (
@@ -494,7 +532,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   <Calendar className="w-5 h-5 text-indigo-600" />
                   {user.role === 'admin' ? 'Tüm Sistem Raporları' : 'Son Raporlar'}
                 </h3>
-                <button onClick={() => setActiveTab('archive')} className="text-xs font-semibold text-indigo-600 hover:underline">Tümünü Gör</button>
+                {user.role !== 'parent' && (
+                  <button onClick={() => setActiveTab('archive')} className="text-xs font-semibold text-indigo-600 hover:underline">Tümünü Gör</button>
+                )}
               </div>
               
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -549,49 +589,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   </div>
                 )}
               </div>
-
-              {/* Quick Stats for Teachers */}
-              {user.role === 'teacher' && students.length > 0 && (
-                <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100">
-                  <h4 className="text-orange-800 font-bold mb-3 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    Sınıf Özeti
-                  </h4>
-                  <div className="flex justify-between items-center text-sm mb-2">
-                    <span className="text-orange-700">Toplam Öğrenci</span>
-                    <span className="font-bold">{students.length}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-orange-700">Yapılan Tarama</span>
-                    <span className="font-bold">{recentReports.length}</span>
-                  </div>
-                  <button onClick={() => setActiveTab('analytics')} className="w-full mt-3 py-2 bg-orange-100 text-orange-800 text-xs font-bold rounded-lg hover:bg-orange-200 transition">
-                    Detaylı Sınıf Analizi
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>
         )}
       </main>
 
-      {/* Add Student Modal */}
+      {/* Add/Edit Student Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
             <h3 className="text-xl font-bold text-gray-900 mb-4">
-              {user.role === 'parent' ? 'Yeni Çocuk Ekle' : 'Yeni Öğrenci Ekle'}
+              {editingStudentId ? 'Öğrenci Bilgilerini Düzenle' : (user.role === 'parent' ? 'Yeni Çocuk Ekle' : 'Yeni Öğrenci Ekle')}
             </h3>
-            <form onSubmit={handleAddStudent} className="space-y-4">
+            <form onSubmit={handleSaveStudent} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad</label>
                 <input
                   type="text"
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={newStudent.name}
-                  onChange={e => setNewStudent({...newStudent, name: e.target.value})}
+                  value={studentFormData.name}
+                  onChange={e => setStudentFormData({...studentFormData, name: e.target.value})}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -603,8 +622,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                     min="4"
                     max="18"
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={newStudent.age}
-                    onChange={e => setNewStudent({...newStudent, age: e.target.value})}
+                    value={studentFormData.age}
+                    onChange={e => setStudentFormData({...studentFormData, age: e.target.value})}
                   />
                 </div>
                 <div>
@@ -612,8 +631,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   <select
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                    value={newStudent.grade}
-                    onChange={e => setNewStudent({...newStudent, grade: e.target.value})}
+                    value={studentFormData.grade}
+                    onChange={e => setStudentFormData({...studentFormData, grade: e.target.value})}
                   >
                     <option value="">Seçiniz</option>
                     <option value="okul_oncesi">Okul Öncesi</option>
@@ -625,6 +644,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   </select>
                 </div>
               </div>
+              
+               <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Özel Notlar</label>
+                  <textarea
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                    placeholder="Varsa özel durumları belirtin..."
+                    value={studentFormData.notes}
+                    onChange={e => setStudentFormData({...studentFormData, notes: e.target.value})}
+                  />
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button 
                   type="button" 
@@ -637,7 +668,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   type="submit" 
                   className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200"
                 >
-                  Kaydet
+                  {editingStudentId ? 'Güncelle' : 'Kaydet'}
                 </button>
               </div>
             </form>
