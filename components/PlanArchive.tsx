@@ -12,8 +12,8 @@ const PlanArchive: React.FC<PlanArchiveProps> = ({ plans, onViewPlan, userRole }
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredPlans = useMemo(() => {
-    if (!searchTerm) return plans;
-    return plans.filter(p => 
+    if (!searchTerm) return plans || [];
+    return (plans || []).filter(p => 
       p.studentName?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [plans, searchTerm]);
@@ -28,7 +28,7 @@ const PlanArchive: React.FC<PlanArchiveProps> = ({ plans, onViewPlan, userRole }
             BEP Arşivi (Eğitim Planları)
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            {userRole === 'teacher' ? 'Öğrencileriniz için oluşturulan' : 'Çocuğunuz için hazırlanan'} toplam {filteredPlans.length} plan.
+            {userRole === 'teacher' ? 'Öğrencileriniz için oluşturulan' : 'Çocuğunuz için hazırlanan'} toplam {filteredPlans?.length || 0} plan.
           </p>
         </div>
         
@@ -46,13 +46,13 @@ const PlanArchive: React.FC<PlanArchiveProps> = ({ plans, onViewPlan, userRole }
 
       {/* Grid List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPlans.length === 0 ? (
+        {filteredPlans?.length === 0 ? (
            <div className="col-span-full bg-white p-12 text-center rounded-2xl border border-dashed border-gray-300">
               <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">Arşivde görüntülenecek eğitim planı bulunamadı.</p>
            </div>
         ) : (
-          filteredPlans.map((plan) => (
+          filteredPlans?.map((plan) => (
             <div key={plan.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition group overflow-hidden flex flex-col">
                <div className="p-5 flex-1">
                   <div className="flex justify-between items-start mb-4">
@@ -72,21 +72,21 @@ const PlanArchive: React.FC<PlanArchiveProps> = ({ plans, onViewPlan, userRole }
                   
                   <div className="space-y-3">
                      <p className="text-sm text-gray-600 line-clamp-3 italic bg-gray-50 p-3 rounded-lg border border-gray-100">
-                       "{plan.content.summary}"
+                       "{plan.content?.summary || 'Özet bilgisi yok.'}"
                      </p>
                      
                      <div className="flex items-center gap-2 text-xs text-gray-500">
                         <FileText className="w-3 h-3" />
-                        <span>{plan.content.goals.length} Hedef</span>
+                        <span>{plan.content?.goals?.length || 0} Hedef</span>
                         <span className="text-gray-300">|</span>
-                        <span>{plan.content.activities.length} Etkinlik</span>
+                        <span>{plan.content?.activities?.length || 0} Etkinlik</span>
                      </div>
                   </div>
                </div>
 
                <div className="bg-gray-50 p-4 border-t border-gray-100 flex justify-between items-center">
                   <span className="text-xs text-gray-400 font-medium">
-                     Revize: {plan.content.reviewDate}
+                     Revize: {plan.content?.reviewDate || '-'}
                   </span>
                   <button 
                     onClick={() => onViewPlan(plan)}

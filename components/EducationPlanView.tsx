@@ -256,7 +256,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({
                <Target className="w-6 h-6 text-red-600" /> Hedefler ve Beklenen Kazanımlar
              </h3>
              <div className="grid grid-cols-1 gap-4">
-                {plan?.goals.map((goal, idx) => (
+                {plan?.goals?.map((goal, idx) => (
                   <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden bg-slate-50 print:break-inside-avoid">
                      <div className="bg-white p-5 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-2">
                         <span className="font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full text-sm w-fit">{goal.area}</span>
@@ -283,7 +283,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({
                <Layout className="w-6 h-6 text-purple-600" /> Yapılandırılmış Eğitim Etkinlikleri
             </h3>
             <div className="space-y-6">
-              {plan?.activities.map((activity, idx) => (
+              {plan?.activities?.map((activity, idx) => (
                 <div key={idx} className="flex flex-col md:flex-row gap-6 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm print:shadow-none print:border-gray-300 break-inside-avoid">
                    <div className="flex-shrink-0 flex flex-col items-center justify-center bg-purple-50 text-purple-700 w-16 h-16 md:w-24 md:h-24 rounded-2xl font-bold text-2xl border border-purple-100">
                       {idx + 1}
@@ -307,8 +307,8 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({
                          </div>
                          <div className="bg-gray-50 p-2 rounded-lg">
                             <span className="block text-gray-400 text-xs font-bold uppercase mb-1">Materyal</span>
-                            <span className="font-medium text-gray-800 truncate" title={activity.materials.join(', ')}>
-                              {activity.materials.join(', ')}
+                            <span className="font-medium text-gray-800 truncate" title={activity.materials?.join(', ')}>
+                              {activity.materials?.join(', ')}
                             </span>
                          </div>
                       </div>
@@ -324,7 +324,7 @@ const EducationPlanView: React.FC<EducationPlanViewProps> = ({
                <User className="w-5 h-5" /> Aile Destek Stratejileri
              </h3>
              <ul className="space-y-3">
-               {plan?.familyStrategies.map((strat, idx) => (
+               {plan?.familyStrategies?.map((strat, idx) => (
                  <li key={idx} className="flex gap-3 items-start text-green-900">
                     <CheckSquare className="w-5 h-5 mt-0.5 flex-shrink-0 text-green-600" />
                     <span>{strat}</span>
