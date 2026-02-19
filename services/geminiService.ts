@@ -11,7 +11,6 @@ const getAiClient = () => {
 }
 
 // Model Yapılandırması
-// Gemini 1.5 serisi yerine Gemini 3 serisi Thinking (Düşünme) modu ile
 const MODEL_NAME = 'gemini-3-flash-preview';
 
 export const generateAnalysis = async (result: ScreeningResult, role: string, age: number): Promise<{ letter: string, actionSteps: string[] }> => {
@@ -34,22 +33,11 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
     .map(f => `- ${f}`)
     .join('\n');
 
-  // Rol ve Persona Ayarı
   const isTeacher = role === 'teacher';
-  
-  const systemPersona = isTeacher 
-    ? "Sen, öğrenme güçlükleri ve kapsayıcı eğitim konusunda 20 yıl deneyimli, akademik literatüre hakim kıdemli bir Özel Eğitim Danışmanısın."
-    : "Sen, çocuk psikolojisi ve aile danışmanlığı konusunda uzman, ebeveyn kaygılarını yönetebilen, empatik ve çözüm odaklı kıdemli bir Çocuk Gelişim Uzmanısın.";
-
   const targetAudience = isTeacher ? "sınıf öğretmenine" : "endişeli bir ebeveyne";
-
-  const adviceContext = isTeacher
-    ? "Sınıf içi uyarlamalar, öğretim materyali farklılaştırma ve akran iletişimi stratejileri."
-    : "Ev ortamında uygulanabilecek oyunlar, rutinler ve duygusal destek yöntemleri.";
-
   const prompt = `
     GÖREV TANIMI:
-    Aşağıdaki öğrenci profilini ve tarama sonuçlarını derinlemesine analiz et. Standart bir rapor yerine, öğrencinin özgün ihtiyaçlarına odaklanan, içgörü dolu bir değerlendirme yap.
+    Aşağıdaki öğrenci profilini ve tarama sonuçlarını derinlemesine analiz et. 
     
     ÖĞRENCİ PROFİLİ:
     - İsim: ${result.studentName}
@@ -63,12 +51,8 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
     ${allFindings || "Belirgin bir kritik semptom işaretlenmemiştir, ancak genel gelişim takibi önerilir."}
 
     İSTENEN ÇIKTI (JSON):
-    1. "letter": ${targetAudience} hitaben yazılmış profesyonel bir mektup. 
-       - Durumu net ama umut verici bir dille özetle.
-       - Asla tıbbi bir tanı (Disleksi, DEHB vb.) koyma; "risk belirtileri", "destek ihtiyacı" gibi ifadeler kullan.
-       - ${isTeacher ? 'Pedagojik terimler ve işbirlikçi bir ton kullan.' : 'Sıcak, anlaşılır ve motive edici bir ton kullan.'}
-    
-    2. "actionSteps": ${adviceContext} odaklı 3 adet somut, uygulanabilir öneri. Genel geçer tavsiyeler yerine, yukarıdaki bulgulara (örneğin b/d karıştırma varsa ona özel) yönelik nokta atışı stratejiler ver.
+    1. "letter": ${targetAudience} hitaben yazılmış profesyonel bir mektup. (Max 1 paragraf, çok uzatma).
+    2. "actionSteps": 3 adet hap bilgi şeklinde öneri.
   `;
 
   try {
@@ -77,10 +61,8 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        // Thinking Config: Düşünme bütçesi ayırıyoruz
-        thinkingConfig: { thinkingBudget: 2048 }, 
-        // Max Output: Düşünme + JSON çıktısı için yeterli alan (Thinking bütçesinden fazla olmalı)
-        maxOutputTokens: 8192, 
+        thinkingConfig: { thinkingBudget: 1024 }, 
+        maxOutputTokens: 4096, 
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -97,17 +79,14 @@ export const generateAnalysis = async (result: ScreeningResult, role: string, ag
 
     let text = response.text;
     if (!text) throw new Error("AI boş yanıt döndürdü.");
-    
-    // Markdown temizliği
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
     return JSON.parse(text);
 
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
     return {
-      letter: "Analiz servisinde geçici bir yoğunluk yaşanıyor. Ancak sonuçlara dayanarak, öğrencinin özellikle zorlandığı alanlarda (kırmızı ile işaretli) bireysel destek alması faydalı olacaktır.",
-      actionSteps: ["Bir çocuk psikiyatristi veya rehberlik servisi ile görüşün.", "Çocuğun güçlü yönlerini (yeşil alanlar) öne çıkararak motivasyonunu artırın.", "Okuma ve dikkat çalışmalarını kısa sürelerle (15-20 dk) sık sık yapın."]
+      letter: "Analiz servisinde geçici bir yoğunluk yaşanıyor.",
+      actionSteps: ["Lütfen daha sonra tekrar deneyiniz."]
     };
   }
 };
@@ -126,30 +105,41 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
     .join(', ');
 
   const prompt = `
-    GÖREV: Bireyselleştirilmiş Eğitim Planı (BEP) Oluşturma
-    ROL: Sen, nöropsikoloji ve özel eğitim alanında uzmanlaşmış, öğrenme süreçlerini çok iyi analiz eden kıdemli bir Eğitim Programcısısın.
+    GÖREV: 7 Günlük Bireysel Gelişim Ajandası Oluşturma
+    ROL: Kıdemli Çocuk Gelişim Uzmanı ve Oyun Terapisti.
     
-    VERİLER:
-    - Öğrenci: ${result.studentName} (${age} Yaş)
-    - Öncelikli Müdahale Alanları: ${highRiskAreas || "Genel Akademik Destek"}
-    - Tespit Edilen Spesifik Sorunlar: ${findings || "Genel dikkat ve motivasyon düşüklüğü"}
+    ÖĞRENCİ: ${result.studentName} (${age} Yaş)
+    ÖNCELİKLİ ALANLAR: ${highRiskAreas || "Genel Bilişsel Destek"}
+    SORUNLAR: ${findings}
 
     TALİMATLAR:
-    Bu öğrenci için okulda ve destek eğitim odasında uygulanmak üzere kapsamlı bir plan hazırla.
-    Planı oluştururken "Düşünme Süreci"ni (Thinking Process) kullanarak şu adımları izle:
-    1. Öğrencinin yaşına ve gelişim dönemine uygun hedefler belirle.
-    2. Tespit edilen her bir soruna (örn: 'b/d karıştırma') karşılık gelen bilimsel bir müdahale yöntemi seç.
-    3. Etkinlikleri 'oyunlaştırılmış' ve 'yapılandırılmış' olarak dengele.
-    4. Aileyi sürece dahil edecek gerçekçi görevler tanımla.
-    5. Çıktıların kısa, öz ve net olsun. Etkinlik açıklamaları ve yöntemler 2-3 cümleyi geçmemelidir. Bu çok önemlidir.
+    Bu öğrenci için Pazartesi'den Pazar'a kadar, her gün için TEK BİR SPESİFİK ve EĞLENCELİ aktivite planla.
+    Plan "ders çalışmak" gibi sıkıcı olmamalı, "oyunlaştırılmış öğrenme" (gamification) temelli olmalı.
+    
+    KURALLAR:
+    1. Her gün farklı bir beceriye odaklan (Örn: Pazartesi Görsel Algı, Salı İşitsel Dikkat).
+    2. Etkinlikler evde veya sınıfta kolay bulunan malzemelerle yapılabilmeli.
+    3. Açıklamalar ("description") çok net olmalı, okuyan kişi "ne yapacağım?" diye sormamalı.
+    4. "difficulty" alanını (Kolay, Orta, Zor) çocuğun yaşına ve sorunun derinliğine göre belirle.
 
     ÇIKTI FORMATI (JSON):
-    Aşağıdaki şemaya tam olarak uy.
-    - summary: Öğrencinin eğitsel ihtiyaçlarını ve pedagojik yaklaşımı özetleyen akademik bir paragraf (Max 50 kelime).
-    - goals: Tam olarak 3 hedef (Alan, Kısa Vadeli, Uzun Vadeli).
-    - activities: Tam olarak 4 etkinlik (Başlık, Açıklama, Süre, Sıklık, Materyaller, Yöntem). Açıklamalar kısa olmalı.
-    - familyStrategies: Tam olarak 3 evde uygulanacak strateji.
-    - reviewDate: Önerilen değerlendirme tarihi.
+    {
+      "summary": "Planın genel felsefesini anlatan motive edici 1 cümle.",
+      "focusAreas": ["Görsel Algı", "İnce Motor", "Dikkat"], 
+      "reviewDate": "Bugünden 30 gün sonrası",
+      "weeklySchedule": [
+         {
+           "day": "Pazartesi",
+           "focusArea": "Görsel Ayırt Etme",
+           "activityName": "Dedektif Mercek Oyunu",
+           "description": "Evin içindeki kırmızı renkli 5 objeyi bulup masaya dizmesini isteyin. Sonra gözlerini kapatıp birini saklayın, hangisi yok bulsun.",
+           "duration": "15 dk",
+           "materialIcon": "game", 
+           "difficulty": "Kolay"
+         },
+         ... (Salı, Çarşamba, Perşembe, Cuma, Cumartesi, Pazar için devam et)
+      ]
+    }
   `;
 
   try {
@@ -158,50 +148,36 @@ export const generateEducationPlan = async (result: ScreeningResult, age: number
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        // Thinking Config: Düşünme bütçesini output'a yer kalması için makul seviyede tutuyoruz
-        thinkingConfig: { thinkingBudget: 2048 }, 
-        // Max Output: Yüksek tutuyoruz ki kesilmesin.
-        maxOutputTokens: 32000, 
+        thinkingConfig: { thinkingBudget: 4096 }, // Karmaşık planlama için bütçe artırıldı
+        maxOutputTokens: 16000, 
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             summary: { type: Type.STRING },
-            goals: {
+            focusAreas: { type: Type.ARRAY, items: { type: Type.STRING } },
+            reviewDate: { type: Type.STRING },
+            weeklySchedule: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  area: { type: Type.STRING },
-                  shortTerm: { type: Type.STRING },
-                  longTerm: { type: Type.STRING }
-                }
-              }
-            },
-            activities: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
+                  day: { type: Type.STRING },
+                  focusArea: { type: Type.STRING },
+                  activityName: { type: Type.STRING },
                   description: { type: Type.STRING },
                   duration: { type: Type.STRING },
-                  frequency: { type: Type.STRING },
-                  materials: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  method: { type: Type.STRING }
+                  materialIcon: { type: Type.STRING },
+                  difficulty: { type: Type.STRING, enum: ["Kolay", "Orta", "Zor"] }
                 }
               }
-            },
-            familyStrategies: { type: Type.ARRAY, items: { type: Type.STRING } },
-            reviewDate: { type: Type.STRING }
+            }
           }
         }
       }
     });
 
     let text = response.text;
-    if (!text) throw new Error("AI Plan oluşturamadı (Boş yanıt).");
-    
-    // Markdown temizliği - JSON Parse hatasını önlemek için
+    if (!text) throw new Error("AI Plan oluşturamadı.");
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
     return JSON.parse(text);

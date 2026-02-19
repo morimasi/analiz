@@ -69,29 +69,23 @@ export interface Message {
   senderName?: string; // UI için joinlenmiş veri
 }
 
-// --- EĞİTİM PLANI (BEP) TİPLERİ ---
+// --- EĞİTİM PLANI (BEP) TİPLERİ - GÜNCELLENDİ ---
 
-export interface PlanGoal {
-  area: string; // Örn: Okuma Becerileri
-  shortTerm: string; // Kısa vadeli hedef
-  longTerm: string; // Uzun vadeli hedef
-}
-
-export interface PlanActivity {
-  title: string;
-  description: string;
-  duration: string; // "20 dakika"
-  frequency: string; // "Haftada 3 gün"
-  materials: string[]; // Kullanılacak materyaller
-  method: string; // Örn: Çok duyulu öğretim
+export interface DailyPlan {
+  day: string;          // "Pazartesi", "Salı"...
+  focusArea: string;    // "Görsel Algı", "İşitsel Dikkat"
+  activityName: string; // "Kelime Avı Oyunu"
+  description: string;  // "Renkli kağıtlara yazılmış kelimeleri..."
+  duration: string;     // "20 dk"
+  materialIcon: string; // "pencil", "book", "game" (UI için ipucu)
+  difficulty: 'Kolay' | 'Orta' | 'Zor';
 }
 
 export interface EducationPlanContent {
-  summary: string; // Genel pedagojik özet
-  goals: PlanGoal[]; // Hedefler listesi
-  activities: PlanActivity[]; // Etkinlik planı
-  familyStrategies: string[]; // Aileye düşen görevler
-  reviewDate: string; // Tekrar değerlendirme tarihi önerisi
+  summary: string;           // Genel motivasyon cümlesi
+  weeklySchedule: DailyPlan[]; // 7 Günlük Plan
+  focusAreas: string[];      // Geliştirilecek 3 temel yetkinlik (Tagler için)
+  reviewDate: string;        // Tekrar değerlendirme tarihi
 }
 
 export interface EducationPlan {
@@ -103,7 +97,6 @@ export interface EducationPlan {
   createdAt: string;
 }
 
-// Eski UserProfile tipini geriye dönük uyumluluk veya formlarda kullanım için Student tipine benzer tutuyoruz
 export interface UserProfile extends Omit<Student, 'id'> {
   role: Role; // Testi çözen kişinin rolü
 }

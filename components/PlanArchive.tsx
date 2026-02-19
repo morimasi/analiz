@@ -77,9 +77,9 @@ const PlanArchive: React.FC<PlanArchiveProps> = ({ plans, onViewPlan, userRole }
                      
                      <div className="flex items-center gap-2 text-xs text-gray-500">
                         <FileText className="w-3 h-3" />
-                        <span>{plan.content?.goals?.length || 0} Hedef</span>
+                        <span>{plan.content?.focusAreas?.length || 0} Odak</span>
                         <span className="text-gray-300">|</span>
-                        <span>{plan.content?.activities?.length || 0} Etkinlik</span>
+                        <span>{plan.content?.weeklySchedule?.length || 0} Günlük</span>
                      </div>
                   </div>
                </div>
