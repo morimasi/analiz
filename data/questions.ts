@@ -1,4 +1,14 @@
-import { Question } from '../types';
+import { Question, EvaluationCategory } from '../types';
+
+export const CATEGORY_TIPS: Record<EvaluationCategory, string> = {
+  attention: "Çocuğunuzun yönergeleri takip etme, eşyalarını düzenleme ve görevlere odaklanma becerilerini gözlemleyin. Ani tepkiler ve sabırsızlık da dikkat edilecek noktalardır.",
+  reading: "Harf karıştırma, satır atlama, okuduğunu anlama güçlüğü gibi belirtilere odaklanın. Sesli okumaya karşı tutumu ve kelime tanıma hızı önemlidir.",
+  writing: "Yazının okunabilirliği, kalem tutuşu, noktalama işaretleri ve düşünceleri kağıda aktarma becerisini değerlendirin. Yazarken gösterdiği fiziksel çaba da bir ipucu olabilir.",
+  math: "Sayıları anlama, basit işlemleri yapma, zaman ve para kavramlarını kullanma becerilerini gözlemleyin. Zihinden işlem yapma ve problem çözme yaklaşımları önemlidir.",
+  language: "Kelimeleri telaffuz etme, cümle kurma, karmaşık yönergeleri anlama ve sosyal iletişim becerilerini değerlendirin. Gürültülü ortamlarda anlama güçlüğü de bir gösterge olabilir.",
+  motor_spatial: "İnce motor (düğme ilikleme, makas kullanma) ve kaba motor (top yakalama, koşma) becerilerini gözlemleyin. Sağ-sol ayrımı, yön bulma ve defter düzeni gibi uzamsal algı belirtilerine dikkat edin.",
+};
+
 
 export const questions: Question[] = [
   // =================================================================

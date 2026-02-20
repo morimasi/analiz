@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Question, UserProfile, EvaluationCategory, CATEGORY_LABELS } from '../types';
-import { questions as allQuestions } from '../data/questions';
+import { questions as allQuestions, CATEGORY_TIPS } from '../data/questions';
 import { AnswerValue } from '../utils/scoring';
 import { ChevronRight, CheckCircle2, Brain, BookOpen, PenTool, Calculator, MessageCircle, Move } from 'lucide-react';
 
@@ -87,6 +87,9 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ profile, onComplete }) =>
             </div>
             <div className="min-w-0">
               <h2 className="text-base md:text-xl font-bold text-gray-800 tracking-tight truncate">{CATEGORY_LABELS[currentCategory]}</h2>
+              <p className="text-xs md:text-sm text-gray-600 mt-1 mb-2 leading-relaxed">
+                {CATEGORY_TIPS[currentCategory]}
+              </p>
               <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide">
                 Adım {currentCategoryIndex + 1} / {categories.length}
               </p>
