@@ -1,7 +1,8 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
-import pg from 'pg';
+import pg, { QueryResult } from 'pg';
 import dotenv from 'dotenv';
+import { User, Student, ScreeningResult, Message, EducationPlan, Invitation } from '../types';
 
 // Vercel ortamında .env otomatik yüklenir
 dotenv.config();
@@ -23,22 +24,22 @@ const pool = new Pool({
 });
 
 // Helper: CamelCase converter for DB rows
-const toCamelCase = (rows) => {
+const toCamelCase = <T extends Record<string, any>>(rows: Record<string, any>[]): T[] => {
   return rows.map(row => {
-    const newRow = {};
+    const newRow: Record<string, any> = {};
     for (const key in row) {
       const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
       newRow[camelKey] = row[key];
     }
-    return newRow;
+    return newRow as T;
   });
 };
 
 // --- API ROUTES ---
 
 // 1. AUTH & USERS
-app.post('/api/auth/login', async (req, res) => {
-  const { email, role } = req.body;
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  const { email, role } = req.body as Pick<User, 'email' | 'role'>;
   try {
     const result = await pool.query(
       'SELECT * FROM users WHERE email = $1 AND role = $2',
@@ -49,14 +50,14 @@ app.post('/api/auth/login', async (req, res) => {
     } else {
       res.status(401).json({ error: 'Kullanıcı bulunamadı' });
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/auth/register', async (req, res) => {
-  const { name, email, role, schoolName } = req.body;
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  const { name, email, role, schoolName } = req.body as User;
   try {
     const check = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (check.rows.length > 0) {
@@ -66,17 +67,17 @@ app.post('/api/auth/register', async (req, res) => {
     const result = await pool.query(
       'INSERT INTO users (name, email, role, school_name) VALUES ($1, $2, $3, $4) RETURNING *',
       [name, email, role, schoolName]
-    );
+    ) as QueryResult<User>;
     res.json(toCamelCase(result.rows)[0]);
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // 2. STUDENTS
-app.get('/api/students', async (req, res) => {
-  const { userId, role } = req.query;
+app.get('/api/students', async (req: Request, res: Response) => {
+  const { userId, role } = req.query as { userId?: string; role?: string; };
   try {
     let query = 'SELECT * FROM students';
     let params = [];
@@ -91,61 +92,61 @@ app.get('/api/students', async (req, res) => {
     
     query += ' ORDER BY created_at DESC';
     
-    const result = await pool.query(query, params);
-    res.json(toCamelCase(result.rows));
-  } catch (err) {
+    const result = await pool.query(query, params) as QueryResult<Student>;
+    res.json(toCamelCase<Student>(result.rows));
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/students', async (req, res) => {
-  const { name, age, grade, gender, parentId, teacherId, notes } = req.body;
+app.post('/api/students', async (req: Request, res: Response) => {
+  const { name, age, grade, gender, parentId, teacherId, notes } = req.body as Student;
   try {
     const result = await pool.query(
       'INSERT INTO students (name, age, grade, gender, parent_id, teacher_id, notes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
       [name, age, grade, gender, parentId, teacherId, notes]
-    );
-    res.json(toCamelCase(result.rows)[0]);
-  } catch (err) {
+    ) as QueryResult<Student>;
+    res.json(toCamelCase<Student>(result.rows)[0]);
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // YENİ: Öğrenci Güncelleme (PUT)
-app.put('/api/students/:id', async (req, res) => {
+app.put('/api/students/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, age, grade, gender, notes } = req.body;
+  const { name, age, grade, gender, notes } = req.body as Partial<Student>;
   try {
     const result = await pool.query(
       'UPDATE students SET name=$1, age=$2, grade=$3, gender=$4, notes=$5 WHERE id=$6 RETURNING *',
       [name, age, grade, gender, notes, id]
-    );
+    ) as QueryResult<Student>;
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Öğrenci bulunamadı' });
     }
     res.json(toCamelCase(result.rows)[0]);
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/students/:id', async (req, res) => {
+app.delete('/api/students/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     await pool.query('DELETE FROM students WHERE id = $1', [id]);
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // 3. SCREENINGS
-app.get('/api/screenings', async (req, res) => {
-  const { userId, role } = req.query;
+app.get('/api/screenings', async (req: Request, res: Response) => {
+  const { userId, role } = req.query as { userId?: string; role?: string; };
   try {
     let query = `
       SELECT s.*, st.name as student_name 
@@ -168,10 +169,10 @@ app.get('/api/screenings', async (req, res) => {
 
     query += ' ORDER BY s.date DESC';
 
-    const result = await pool.query(query, params);
+    const result = await pool.query(query, params) as QueryResult<any>;
     
     // Manual mapping needed because of JSONB fields and join
-    const mapped = result.rows.map(row => ({
+    const mapped: ScreeningResult[] = result.rows.map(row => ({
       id: row.id,
       studentId: row.student_id,
       studentName: row.student_name,
@@ -183,46 +184,46 @@ app.get('/api/screenings', async (req, res) => {
     }));
 
     res.json(mapped);
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/screenings', async (req, res) => {
-  const { studentId, completedBy, totalScore, categoryScores, aiAnalysis, date } = req.body;
+app.post('/api/screenings', async (req: Request, res: Response) => {
+  const { studentId, completedBy, totalScore, categoryScores, aiAnalysis, date } = req.body as ScreeningResult;
   try {
     const result = await pool.query(
       'INSERT INTO screenings (student_id, completed_by_role, total_score, category_scores, ai_analysis, date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
       [studentId, completedBy, totalScore, JSON.stringify(categoryScores), JSON.stringify(aiAnalysis), date]
-    );
+    ) as QueryResult<ScreeningResult>;
     // Return formatted result
-    const row = result.rows[0];
+    const row: ScreeningResult = result.rows[0];
     res.json({
       id: row.id,
-      studentId: row.student_id,
-      completedBy: row.completed_by_role,
-      totalScore: row.total_score,
+      studentId: row.studentId,
+      completedBy: row.completedBy,
+      totalScore: row.totalScore,
       date: row.date,
-      categoryScores: row.category_scores,
-      aiAnalysis: row.ai_analysis
+      categoryScores: row.categoryScores,
+      aiAnalysis: row.aiAnalysis
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // 3.1 UPDATE SCREENING ANALYSIS (YENİ)
-app.put('/api/screenings/:id/analysis', async (req, res) => {
+app.put('/api/screenings/:id/analysis', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { aiAnalysis } = req.body;
+  const { aiAnalysis } = req.body as Pick<ScreeningResult, 'aiAnalysis'>;
   
   try {
     const result = await pool.query(
       'UPDATE screenings SET ai_analysis = $1 WHERE id = $2 RETURNING *',
       [JSON.stringify(aiAnalysis), id]
-    );
+    ) as QueryResult<ScreeningResult>;
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Rapor bulunamadı' });
@@ -231,17 +232,17 @@ app.put('/api/screenings/:id/analysis', async (req, res) => {
     const row = result.rows[0];
     res.json({
        id: row.id,
-       aiAnalysis: row.ai_analysis
+       aiAnalysis: row.aiAnalysis
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Analysis Update Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // 4. MESSAGES
-app.get('/api/messages', async (req, res) => {
-  const { userId } = req.query;
+app.get('/api/messages', async (req: Request, res: Response) => {
+  const { userId } = req.query as { userId?: string; };
   try {
     // Get messages where user is sender OR receiver
     // Join with users table to get sender name
@@ -252,31 +253,31 @@ app.get('/api/messages', async (req, res) => {
       WHERE m.receiver_id = $1 OR m.sender_id = $1
       ORDER BY m.created_at DESC
     `;
-    const result = await pool.query(query, [userId]);
-    res.json(toCamelCase(result.rows));
-  } catch (err) {
+    const result = await pool.query(query, [userId]) as QueryResult<Message>;
+    res.json(toCamelCase<Message>(result.rows));
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/messages', async (req, res) => {
-  const { senderId, receiverId, content } = req.body;
+app.post('/api/messages', async (req: Request, res: Response) => {
+  const { senderId, receiverId, content } = req.body as Message;
   try {
     const result = await pool.query(
       'INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1, $2, $3) RETURNING *',
       [senderId, receiverId, content]
-    );
-    res.json(toCamelCase(result.rows)[0]);
-  } catch (err) {
+    ) as QueryResult<Message>;
+    res.json(toCamelCase<Message>(result.rows)[0]);
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // 5. EDUCATION PLANS (BEP)
-app.get('/api/education-plans', async (req, res) => {
-  const { userId, role, studentId } = req.query;
+app.get('/api/education-plans', async (req: Request, res: Response) => {
+  const { userId, role, studentId } = req.query as { userId?: string; role?: string; studentId?: string; };
   try {
     let query = `
       SELECT ep.*, s.name as "studentName" 
@@ -300,56 +301,56 @@ app.get('/api/education-plans', async (req, res) => {
     
     query += ` ORDER BY ep.created_at DESC`;
     
-    const result = await pool.query(query, params);
+    const result = await pool.query(query, params) as QueryResult<EducationPlan & { studentName: string }>;
     
-    res.json(result.rows.map(row => ({
+    res.json(result.rows.map((row) => ({
        id: row.id,
-       studentId: row.student_id,
-       teacherId: row.teacher_id,
-       screeningId: row.screening_id,
+       studentId: row.studentId,
+       teacherId: row.teacherId,
+       screeningId: row.screeningId,
        content: row.content, // JSONB postgres tarafından otomatik parse edilir
-       createdAt: row.created_at,
+       createdAt: row.createdAt,
        studentName: row.studentName
     })));
-  } catch (err) {
+  } catch (err: any) {
     console.error("Education Plan Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/education-plans', async (req, res) => {
-  const { studentId, teacherId, screeningId, content } = req.body;
+app.post('/api/education-plans', async (req: Request, res: Response) => {
+  const { studentId, teacherId, screeningId, content } = req.body as EducationPlan;
   try {
     const result = await pool.query(
       'INSERT INTO education_plans (student_id, teacher_id, screening_id, content) VALUES ($1, $2, $3, $4) RETURNING *',
       [studentId, teacherId, screeningId, JSON.stringify(content)]
-    );
+    ) as QueryResult<EducationPlan>;
     
-    const row = result.rows[0];
+    const row: EducationPlan = result.rows[0];
     res.json({
        id: row.id,
-       studentId: row.student_id,
-       teacherId: row.teacher_id,
-       screeningId: row.screening_id,
+       studentId: row.studentId,
+       teacherId: row.teacherId,
+       screeningId: row.screeningId,
        content: row.content,
-       createdAt: row.created_at
+       createdAt: row.createdAt
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // 6. INVITATIONS (YENİ)
-app.post('/api/invitations', async (req, res) => {
-  const { teacherId, studentId, parentEmail } = req.body;
+app.post('/api/invitations', async (req: Request, res: Response) => {
+  const { teacherId, studentId, parentEmail } = req.body as Invitation;
   try {
     const result = await pool.query(
       'INSERT INTO invitations (teacher_id, student_id, parent_email) VALUES ($1, $2, $3) RETURNING id',
       [teacherId, studentId, parentEmail]
-    );
+    ) as QueryResult<{ id: string }>;
     
-    const inviteId = result.rows[0].id;
+    const inviteId: string = result.rows[0].id;
     // In a real app, this would be your actual domain
     const inviteLink = `https://mindscreen-ai.app/register?invite=${inviteId}`;
     

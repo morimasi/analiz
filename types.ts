@@ -108,6 +108,14 @@ export interface UserProfile extends Omit<Student, 'id'> {
   role: Role; // Testi çözen kişinin rolü
 }
 
+export interface Invitation {
+  id?: string;
+  teacherId: string;
+  studentId: string;
+  parentEmail: string;
+  createdAt?: string;
+}
+
 export const CATEGORY_LABELS: Record<EvaluationCategory, string> = {
   attention: 'Dikkat & Odaklanma',
   reading: 'Okuma Becerileri',
