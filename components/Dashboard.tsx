@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { User, Student, ScreeningResult, Message, EducationPlan } from '../types';
+import { User, Student, ScreeningResult, Message, EducationPlan, DashboardInsight } from '../types';
 import { api } from '../services/db';
+import { generateDashboardBriefing } from '../services/geminiService';
 import ArchiveView from './ArchiveView';
 import AnalyticsView from './AnalyticsView';
 import EducationPlanView from './EducationPlanView'; 
 import PlanArchive from './PlanArchive';
-import { Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, BarChart2, FolderOpen, ClipboardList, Sparkles, Pencil, UserPlus, Link as LinkIcon, Copy, Check } from 'lucide-react';
+import { 
+  Plus, User as UserIcon, Calendar, FileText, ChevronRight, LogOut, 
+  Trash2, AlertCircle, Mail, Send, Loader2, ShieldCheck, PieChart, 
+  BarChart2, FolderOpen, ClipboardList, Sparkles, Pencil, UserPlus, 
+  Link as LinkIcon, Copy, Check, Zap, ArrowUpRight, Target, Activity,
+  Users, MessageSquare, Bell
+} from 'lucide-react';
 
 interface DashboardProps {
   user: User;
@@ -19,23 +26,23 @@ type Tab = 'overview' | 'students' | 'messages' | 'archive' | 'analytics' | 'edu
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening, onViewReport }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [loading, setLoading] = useState(true);
+  const [briefingLoading, setBriefingLoading] = useState(false);
   
   const [students, setStudents] = useState<Student[]>([]);
   const [recentReports, setRecentReports] = useState<(ScreeningResult & { studentName: string })[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [allPlans, setAllPlans] = useState<(EducationPlan & { studentName?: string })[]>([]);
+  const [aiInsights, setAiInsights] = useState<DashboardInsight[]>([]);
   
-  // Eğitim Planı için State
   const [planTargetStudent, setPlanTargetStudent] = useState<Student | null>(null);
   const [planTargetScreening, setPlanTargetScreening] = useState<ScreeningResult | null>(null);
   const [planToView, setPlanToView] = useState<EducationPlan | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingStudentId, setEditingStudentId] = useState<string | null>(null); // Düzenleme modu için
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [studentFormData, setStudentFormData] = useState({ name: '', age: '', grade: '', gender: 'male', notes: '' });
   const [newMessage, setNewMessage] = useState({ to: '', content: '' });
 
-  // Davetiye State
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteTargetStudent, setInviteTargetStudent] = useState<Student | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -43,7 +50,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   const [copied, setCopied] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
 
-  // Data Loading
   useEffect(() => {
     loadData();
   }, [user]);
@@ -51,26 +57,35 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   const loadData = async () => {
     setLoading(true);
     try {
-      // Paralel veri çekimi
       const promises: Promise<any>[] = [
         api.students.list(user.id, user.role),
         api.screenings.listByUser(user.id, user.role),
         api.messages.list(user.id)
       ];
 
-      // Sadece öğretmenler planları çekebilir
       if (user.role !== 'parent') {
         promises.push(api.plans.list(user.id, user.role));
       }
 
       const results = await Promise.all(promises);
       
-      setStudents(results[0] as Student[]);
-      setRecentReports(results[1] as (ScreeningResult & { studentName: string })[]);
+      const fetchedStudents = results[0] as Student[];
+      const fetchedReports = results[1] as (ScreeningResult & { studentName: string })[];
+      
+      setStudents(fetchedStudents);
+      setRecentReports(fetchedReports);
       setMessages(results[2] as Message[]);
       
       if (user.role !== 'parent') {
         setAllPlans(results[3] as (EducationPlan & { studentName?: string })[]);
+      }
+
+      // Generate AI Briefing if we have data
+      if (fetchedReports.length > 0) {
+        setBriefingLoading(true);
+        const insights = await generateDashboardBriefing(fetchedReports, user.role);
+        setAiInsights(insights);
+        setBriefingLoading(false);
       }
 
     } catch (e) {
@@ -109,15 +124,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   const handleInviteParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteTargetStudent || !inviteEmail) return;
-
     setInviteLoading(true);
     try {
       const result = await api.invitations.create(user.id, inviteTargetStudent.id, inviteEmail);
-      if (result.success) {
-        setGeneratedLink(result.link);
-      }
+      if (result.success) setGeneratedLink(result.link);
     } catch (error) {
-      alert("Davetiye oluşturulamadı. Lütfen tekrar deneyin.");
+      alert("Hata oluştu.");
     } finally {
       setInviteLoading(false);
     }
@@ -131,41 +143,29 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
 
   const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (studentFormData.name && studentFormData.age && studentFormData.grade) {
-      const studentData: any = {
-        name: studentFormData.name,
-        age: Number(studentFormData.age),
-        grade: studentFormData.grade,
-        gender: studentFormData.gender,
-        notes: studentFormData.notes
-      };
-
-      try {
-        if (editingStudentId) {
-          // UPDATE
-          await api.students.update(editingStudentId, studentData);
-        } else {
-          // CREATE
-          if (user.role === 'parent') {
-            studentData.parentId = user.id;
-          } else {
-            studentData.teacherId = user.id;
-          }
-          await api.students.add(studentData);
-        }
-        
-        setShowAddModal(false);
-        setStudentFormData({ name: '', age: '', grade: '', gender: 'male', notes: '' });
-        setEditingStudentId(null);
-        loadData();
-      } catch (error) {
-        alert("İşlem sırasında bir hata oluştu.");
+    const studentData: any = {
+      name: studentFormData.name,
+      age: Number(studentFormData.age),
+      grade: studentFormData.grade,
+      gender: studentFormData.gender,
+      notes: studentFormData.notes
+    };
+    try {
+      if (editingStudentId) await api.students.update(editingStudentId, studentData);
+      else {
+        if (user.role === 'parent') studentData.parentId = user.id;
+        else studentData.teacherId = user.id;
+        await api.students.add(studentData);
       }
+      setShowAddModal(false);
+      loadData();
+    } catch (error) {
+      alert("Hata oluştu.");
     }
   };
 
   const handleDeleteStudent = async (id: string) => {
-    if (confirm("Öğrenci kaydını ve ilgili tüm verileri silmek istediğinize emin misiniz?")) {
+    if (confirm("Silmek istediğinize emin misiniz?")) {
       await api.students.delete(id);
       loadData();
     }
@@ -173,17 +173,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    let receiverId = '';
-    if (user.role === 'parent') {
-       const teacherId = students[0]?.teacherId;
-       receiverId = teacherId || 'demo_teacher_1';
-    } else {
-       receiverId = 'demo_parent_1';
-    }
-
     await api.messages.send({
       senderId: user.id,
-      receiverId: receiverId,
+      receiverId: user.role === 'parent' ? (students[0]?.teacherId || 'demo_teacher_1') : 'demo_parent_1',
       content: newMessage.content,
       senderName: user.name
     });
@@ -193,17 +185,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
 
   const handleArchiveReportView = (report: ScreeningResult) => {
     const student = students.find(s => s.id === report.studentId);
-    if(student) {
-        onViewReport(report, student);
-    } else {
-        const mockStudent: Student = { 
-            id: report.studentId || 'unknown', 
-            name: (report as any).studentName || 'Bilinmeyen Öğrenci', 
-            age: 0, 
-            grade: '?' 
-        };
-        onViewReport(report, mockStudent);
-    }
+    onViewReport(report, student || { id: '?', name: report.studentName, age: 0, grade: '?' } as Student);
   };
 
   const handleCreateEducationPlan = (report: ScreeningResult) => {
@@ -217,13 +199,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   };
 
   const handleViewArchivedPlan = (plan: EducationPlan) => {
-    const student = students.find(s => s.id === plan.studentId) || { 
-       id: plan.studentId, 
-       name: (plan as any).studentName || 'Öğrenci', 
-       age: 0, 
-       grade: '?' 
-    } as Student;
-
+    const student = students.find(s => s.id === plan.studentId) || { id: plan.studentId, name: (plan as any).studentName, age: 0, grade: '?' } as Student;
     setPlanTargetStudent(student);
     setPlanToView(plan);
     setPlanTargetScreening(null);
@@ -239,456 +215,317 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Verileriniz güvenle yükleniyor...</p>
-        </div>
+        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
       </div>
     );
   }
 
-  // Admin özel istatistikleri
-  const totalStudents = students.length;
-  const highRiskCount = recentReports.filter(r => r.totalScore >= 65).length;
-  const totalScreenings = recentReports.length;
-
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      {/* Dynamic Header */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-40 transition-all duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${user.role === 'admin' ? 'bg-slate-800' : 'bg-indigo-600'}`}>
-               <span className="text-2xl text-white">🧠</span>
+            <div className={`p-2 rounded-xl ${user.role === 'admin' ? 'bg-slate-900' : 'bg-indigo-600'} shadow-lg shadow-indigo-100`}>
+               <Zap className="w-5 h-5 md:w-6 md:h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 tracking-tight">MindScreen AI</h1>
-              <p className="text-xs text-gray-500 font-medium">
-                {user.role === 'parent' ? 'Veli Paneli' : user.role === 'admin' ? 'Yönetici Paneli' : 'Öğretmen Paneli'}
-              </p>
+              <h1 className="text-lg md:text-xl font-black text-gray-900 tracking-tight flex items-center gap-1.5">
+                MindScreen <span className="text-indigo-600">AI</span>
+              </h1>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-             {/* Desktop Nav */}
-             <nav className="hidden md:flex bg-gray-100 p-1 rounded-lg">
-                <button 
-                  onClick={() => setActiveTab('overview')} 
-                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${activeTab === 'overview' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Genel Bakış
+          <div className="flex items-center gap-2 md:gap-4">
+             <nav className="hidden lg:flex bg-gray-100/50 p-1 rounded-xl border border-gray-200">
+                <button onClick={() => setActiveTab('overview')} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'overview' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-800'}`}>
+                  ÖZET
                 </button>
-                
-                {/* VELİLER ARŞİVİ GÖREMEZ */}
                 {user.role !== 'parent' && (
-                  <button 
-                    onClick={() => setActiveTab('archive')} 
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <FolderOpen className="w-4 h-4"/> Rapor Arşivi
+                  <button onClick={() => setActiveTab('archive')} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'archive' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-800'}`}>
+                    ARŞİV
                   </button>
                 )}
-                
-                {/* BEP Arşivi Sadece Öğretmen ve Yöneticiler İçin */}
                 {user.role !== 'parent' && (
-                  <button 
-                    onClick={() => setActiveTab('plan_archive')} 
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'plan_archive' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <ClipboardList className="w-4 h-4"/> BEP Arşivi
+                  <button onClick={() => setActiveTab('plan_archive')} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'plan_archive' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-800'}`}>
+                    BEP
                   </button>
                 )}
-
-                {/* ANALİZLER VELİLERE KAPALI */}
                 {user.role !== 'parent' && (
-                  <button 
-                    onClick={() => setActiveTab('analytics')} 
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'analytics' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <BarChart2 className="w-4 h-4"/> Analizler
+                  <button onClick={() => setActiveTab('analytics')} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'analytics' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-800'}`}>
+                    ANALİZ
                   </button>
                 )}
-
-                {user.role !== 'admin' && (
-                  <button onClick={() => setActiveTab('messages')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition flex items-center gap-2 ${activeTab === 'messages' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-                    Mesajlar
-                    {messages.filter(m => !m.isRead && m.receiverId === user.id).length > 0 && (
-                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                    )}
-                  </button>
-                )}
+                <button onClick={() => setActiveTab('messages')} className={`relative px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'messages' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-800'}`}>
+                  MESAJLAR
+                  {messages.some(m => !m.isRead && m.receiverId === user.id) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse border-2 border-white"></span>}
+                </button>
              </nav>
 
-            <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100">
-              <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm">
-                {user.name.charAt(0)}
-              </div>
-              <div className="hidden md:block text-sm mr-2">
-                <p className="font-semibold text-gray-700 leading-none">{user.name}</p>
-              </div>
-            </div>
-            <button 
-              onClick={onLogout}
-              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition"
-              title="Çıkış Yap"
-            >
+            <button onClick={onLogout} className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10">
         
-        {/* === TAB: EDUCATION PLAN (VIEW / CREATE) === */}
-        {activeTab === 'education_plan' && planTargetStudent && user.role !== 'parent' && (
+        {activeTab === 'education_plan' && planTargetStudent && (
            <EducationPlanView 
-             student={planTargetStudent}
-             teacherId={user.id}
-             screeningResult={planTargetScreening || undefined}
-             preLoadedPlan={planToView || undefined}
-             onBack={() => {
-                if (planToView) setActiveTab('plan_archive');
-                else setActiveTab('overview');
-             }}
-             userRole={user.role}
+             student={planTargetStudent} teacherId={user.id} screeningResult={planTargetScreening || undefined} preLoadedPlan={planToView || undefined}
+             onBack={() => planToView ? setActiveTab('plan_archive') : setActiveTab('overview')} userRole={user.role}
            />
         )}
 
-        {/* === TAB: PLAN ARCHIVE === */}
-        {activeTab === 'plan_archive' && user.role !== 'parent' && (
-           <PlanArchive 
-             plans={allPlans} 
-             onViewPlan={handleViewArchivedPlan} 
-             userRole={user.role}
-           />
-        )}
-
-        {/* === TAB: MESSAGES === */}
-        {activeTab === 'messages' && user.role !== 'admin' && (
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[600px] animate-fade-in">
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col shadow-sm">
-                 <div className="p-4 border-b border-gray-100 bg-gray-50">
-                    <h3 className="font-bold text-gray-800">Gelen Kutusu</h3>
+        {activeTab === 'plan_archive' && <PlanArchive plans={allPlans} onViewPlan={handleViewArchivedPlan} userRole={user.role} />}
+        {activeTab === 'archive' && <ArchiveView reports={recentReports} onViewReport={handleArchiveReportView} userRole={user.role} />}
+        {activeTab === 'analytics' && <AnalyticsView reports={recentReports} userRole={user.role} />}
+        {activeTab === 'messages' && (
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 h-[500px] md:h-[600px] animate-fade-in">
+              <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden flex flex-col shadow-sm">
+                 <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                    <h3 className="font-bold text-gray-900">Gelen Kutusu</h3>
+                    <MessageSquare className="w-4 h-4 text-gray-400" />
                  </div>
                  <div className="flex-1 overflow-y-auto">
-                    {messages.length === 0 ? (
-                      <div className="p-8 text-center text-gray-400 text-sm">Mesajınız yok.</div>
-                    ) : (
-                      messages.map(msg => (
-                        <div key={msg.id} className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${msg.senderId === user.id ? 'bg-indigo-50/30' : ''}`}>
-                           <div className="flex justify-between mb-1">
-                              <span className="font-bold text-sm text-gray-800">{msg.senderId === user.id ? 'Ben' : msg.senderName}</span>
-                              <span className="text-xs text-gray-400">{new Date(msg.createdAt).toLocaleDateString()}</span>
-                           </div>
-                           <p className="text-sm text-gray-600 line-clamp-2">{msg.content}</p>
-                        </div>
-                      ))
-                    )}
+                    {messages.length === 0 ? <div className="p-10 text-center text-gray-400 text-sm">Mesaj yok.</div> : messages.map(msg => (
+                      <div key={msg.id} className={`p-5 border-b border-gray-100 cursor-pointer hover:bg-indigo-50/30 transition-all ${msg.senderId === user.id ? 'opacity-80' : ''}`}>
+                         <div className="flex justify-between mb-1.5">
+                            <span className="font-bold text-sm text-gray-900">{msg.senderId === user.id ? 'Siz' : msg.senderName}</span>
+                            <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                         </div>
+                         <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">{msg.content}</p>
+                      </div>
+                    ))}
                  </div>
               </div>
-
-              <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 flex flex-col shadow-sm">
-                 <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <Send className="w-4 h-4 text-indigo-600" /> Yeni Mesaj Gönder
+              <div className="lg:col-span-2 bg-white rounded-3xl border border-gray-200 p-6 md:p-8 flex flex-col shadow-sm">
+                 <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2">
+                    <Send className="w-5 h-5 text-indigo-600" /> Mesaj Oluştur
                  </h3>
-                 <div className="flex-1 flex flex-col gap-4">
-                    <div className="bg-yellow-50 p-3 rounded-lg text-xs text-yellow-700 border border-yellow-100">
-                       Not: Bu demo sürümünde mesajlar otomatik olarak bağlı olduğunuz {user.role === 'parent' ? 'sınıf öğretmenine' : 'öğrenci velisine'} iletilir.
-                    </div>
-                    <textarea 
-                       className="w-full flex-1 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-gray-50"
-                       placeholder="Mesajınızı buraya yazın..."
-                       value={newMessage.content}
-                       onChange={e => setNewMessage({...newMessage, content: e.target.value})}
-                    ></textarea>
-                    <div className="flex justify-end">
-                       <button 
-                         onClick={handleSendMessage}
-                         disabled={!newMessage.content}
-                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                       >
-                         Gönder <Send className="w-4 h-4" />
-                       </button>
-                    </div>
+                 <textarea 
+                    className="w-full flex-1 p-5 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all resize-none bg-gray-50/50 text-gray-700"
+                    placeholder="Mesajınızı buraya detaylıca yazın..."
+                    value={newMessage.content}
+                    onChange={e => setNewMessage({...newMessage, content: e.target.value})}
+                 ></textarea>
+                 <div className="mt-6 flex justify-end">
+                    <button onClick={handleSendMessage} disabled={!newMessage.content} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-indigo-100 active:scale-95">
+                      Gönder <Send className="w-4 h-4" />
+                    </button>
                  </div>
               </div>
            </div>
         )}
 
-        {/* === TAB: ARCHIVE === */}
-        {activeTab === 'archive' && user.role !== 'parent' && (
-          <ArchiveView reports={recentReports} onViewReport={handleArchiveReportView} userRole={user.role} />
-        )}
-
-        {/* === TAB: ANALYTICS === */}
-        {activeTab === 'analytics' && user.role !== 'parent' && (
-          <AnalyticsView reports={recentReports} userRole={user.role} />
-        )}
-
-        {/* === TAB: OVERVIEW === */}
+        {/* === TAB: OVERVIEW (BENTO GRID REDESIGN) === */}
         {activeTab === 'overview' && (
-        <div className="space-y-8">
-          {/* Welcome Section */}
-          <div className={`rounded-2xl p-8 text-white shadow-xl relative overflow-hidden animate-fade-in ${user.role === 'admin' ? 'bg-gradient-to-r from-slate-800 to-slate-900' : 'bg-gradient-to-r from-indigo-600 to-purple-700'}`}>
-            <div className="relative z-10">
-              <h2 className="text-3xl font-bold mb-2">Merhaba, {user.name} 👋</h2>
-              <p className={`${user.role === 'admin' ? 'text-slate-300' : 'text-indigo-100'} max-w-xl text-lg`}>
-                {user.role === 'parent' 
-                  ? 'Çocuğunuzun bilişsel gelişimini takip etmek ve desteklemek için doğru yerdesiniz.' 
-                  : user.role === 'admin' 
-                    ? 'Sistem genelindeki tarama verileri ve kullanıcı istatistikleri aşağıdadır.'
-                    : 'Sınıfınızdaki öğrencilerin gelişim risklerini erken tespit edip aksiyon alın.'}
-              </p>
-            </div>
-            <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
-              <BrainPattern />
-            </div>
-          </div>
-
-          {/* Admin Stats Cards */}
-          {user.role === 'admin' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                  <div className="bg-blue-100 p-3 rounded-xl text-blue-600"><UserIcon className="w-6 h-6"/></div>
-                  <div>
-                    <p className="text-gray-500 text-sm">Toplam Öğrenci</p>
-                    <h3 className="text-2xl font-bold text-gray-800">{totalStudents}</h3>
-                  </div>
-              </div>
-              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                  <div className="bg-green-100 p-3 rounded-xl text-green-600"><FileText className="w-6 h-6"/></div>
-                  <div>
-                    <p className="text-gray-500 text-sm">Tamamlanan Tarama</p>
-                    <h3 className="text-2xl font-bold text-gray-800">{totalScreenings}</h3>
-                  </div>
-              </div>
-              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                  <div className="bg-red-100 p-3 rounded-xl text-red-600"><AlertCircle className="w-6 h-6"/></div>
-                  <div>
-                    <p className="text-gray-500 text-sm">Yüksek Riskli</p>
-                    <h3 className="text-2xl font-bold text-gray-800">{highRiskCount}</h3>
-                  </div>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="space-y-8 animate-fade-in">
             
-            {/* Left Column: Students List */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <UserIcon className="w-5 h-5 text-indigo-600" />
-                  {user.role === 'parent' ? 'Çocuklarım' : 'Öğrenci Listesi'}
-                </h3>
-                <button 
-                  onClick={openAddModal}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition shadow-lg shadow-indigo-200 active:scale-95"
-                >
-                  <Plus className="w-4 h-4" />
-                  {user.role === 'parent' ? 'Çocuk Ekle' : 'Öğrenci Ekle'}
-                </button>
-              </div>
-
-              {students.length === 0 ? (
-                <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center">
-                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <UserIcon className="w-8 h-8 text-gray-300" />
-                  </div>
-                  <h4 className="text-lg font-medium text-gray-900 mb-2">Henüz kayıt yok</h4>
-                  <p className="text-gray-500 mb-6">Analiz yapmaya başlamak için önce profil ekleyin.</p>
-                  <button 
-                    onClick={openAddModal}
-                    className="text-indigo-600 font-semibold hover:text-indigo-800"
-                  >
-                    + Yeni Kayıt Ekle
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {students.map(student => (
-                    <div key={student.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition group relative">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
-                            {student.name.charAt(0)}
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-gray-900">{student.name}</h4>
-                            <p className="text-xs text-gray-500">{student.grade}. Sınıf • {student.age} Yaş</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                            <button 
-                              onClick={() => openEditModal(student)}
-                              className="text-gray-400 hover:text-blue-500 p-1 rounded hover:bg-blue-50 transition"
-                              title="Düzenle"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteStudent(student.id)}
-                              className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition"
-                              title="Sil"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                        </div>
+            {/* 1. ROW: AI Briefing & Quick Stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+               
+               {/* AI Smart Briefing (8 cols) */}
+               <div className="lg:col-span-8 bg-white rounded-[2rem] p-6 md:p-8 border border-gray-200 shadow-sm relative overflow-hidden group">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                        <Sparkles className="w-5 h-5 animate-pulse" />
                       </div>
-                      
-                      <div className="flex gap-2 mb-2">
-                        {user.role === 'teacher' && !student.parentId && (
-                           <button 
-                             onClick={() => openInviteModal(student)}
-                             className="flex-1 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg font-medium text-xs transition flex items-center justify-center gap-1 border border-green-200"
-                           >
-                              <UserPlus className="w-3.5 h-3.5" /> Veli Davet Et
-                           </button>
-                        )}
+                      <div>
+                        <h3 className="text-xl font-black text-gray-900 tracking-tight">Akıllı Brifing</h3>
+                        <p className="text-xs text-indigo-600 font-bold uppercase tracking-widest">Günün Özeti</p>
                       </div>
-
-                      {user.role !== 'admin' && (
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => onStartScreening(student)}
-                            className="flex-1 py-2.5 bg-gray-50 hover:bg-indigo-50 hover:text-indigo-700 text-gray-600 rounded-lg font-medium text-xs transition flex items-center justify-center gap-2 border border-gray-200 hover:border-indigo-200"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            Tarama Yap
-                          </button>
-                          
-                          <button 
-                            onClick={() => setActiveTab('messages')}
-                            className="px-3 py-2.5 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 text-gray-600 rounded-lg border border-gray-200 transition"
-                          >
-                            <Mail className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      
-                      {user.role === 'admin' && (
-                        <div className="bg-gray-50 p-2 rounded text-xs text-gray-500 flex items-center gap-1">
-                            <ShieldCheck className="w-3 h-3" /> Yönetici Görünümü
-                        </div>
-                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+                    {briefingLoading && <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     {aiInsights.length > 0 ? aiInsights.map((insight, idx) => (
+                       <div key={idx} className={`p-5 rounded-2xl border transition-all hover:scale-[1.02] cursor-default flex flex-col justify-between ${
+                         insight.priority === 'high' ? 'bg-red-50/50 border-red-100' :
+                         insight.priority === 'medium' ? 'bg-orange-50/50 border-orange-100' : 'bg-green-50/50 border-green-100'
+                       }`}>
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                               <div className={`w-2 h-2 rounded-full ${insight.priority === 'high' ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                               <h4 className="text-sm font-black text-gray-800 uppercase tracking-tight">{insight.title}</h4>
+                            </div>
+                            <p className="text-sm text-gray-600 leading-snug">{insight.content}</p>
+                          </div>
+                          {insight.actionLabel && (
+                            <button className="mt-4 text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1 hover:translate-x-1 transition-transform">
+                               {insight.actionLabel} <ArrowUpRight className="w-3 h-3" />
+                            </button>
+                          )}
+                       </div>
+                     )) : (
+                        <div className="col-span-3 py-6 text-center text-gray-400 italic text-sm border-2 border-dashed border-gray-100 rounded-2xl">
+                           {!briefingLoading && "Henüz analiz edilecek veri bulunmuyor."}
+                           {briefingLoading && "Yapay zeka verileri okuyor..."}
+                        </div>
+                     )}
+                  </div>
+
+                  {/* Decorative Background */}
+                  <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-50 group-hover:bg-purple-50 transition-colors duration-500"></div>
+               </div>
+
+               {/* Quick KPI (4 cols) */}
+               <div className="lg:col-span-4 grid grid-rows-2 gap-4">
+                  <div className="bg-slate-900 rounded-[2rem] p-6 text-white flex flex-col justify-between shadow-xl">
+                     <div className="flex justify-between items-start">
+                        <Users className="w-6 h-6 text-indigo-400" />
+                        <span className="text-[10px] font-bold bg-white/10 px-2 py-1 rounded-full text-indigo-300">AKTİF</span>
+                     </div>
+                     <div>
+                        <h4 className="text-4xl font-black mb-1">{students.length}</h4>
+                        <p className="text-xs text-slate-400 uppercase font-bold tracking-widest">Kayıtlı Öğrenci</p>
+                     </div>
+                  </div>
+                  <div className="bg-indigo-600 rounded-[2rem] p-6 text-white flex flex-col justify-between shadow-xl">
+                     <div className="flex justify-between items-start">
+                        <Activity className="w-6 h-6 text-indigo-200" />
+                        <span className="text-[10px] font-bold bg-white/10 px-2 py-1 rounded-full">TOPLAM</span>
+                     </div>
+                     <div>
+                        <h4 className="text-4xl font-black mb-1">{recentReports.length}</h4>
+                        <p className="text-xs text-indigo-100 uppercase font-bold tracking-widest">Tamamlanan Analiz</p>
+                     </div>
+                  </div>
+               </div>
             </div>
 
-            {/* Right Column: Recent Activity / Reports */}
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-indigo-600" />
-                  {user.role === 'admin' ? 'Tüm Sistem Raporları' : 'Son Raporlar'}
-                </h3>
-                {user.role !== 'parent' && (
-                  <button onClick={() => setActiveTab('archive')} className="text-xs font-semibold text-indigo-600 hover:underline">Tümünü Gör</button>
-                )}
-              </div>
-              
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                {recentReports.length === 0 ? (
-                  <div className="p-8 text-center text-gray-400 text-sm">
-                    Henüz tamamlanmış bir tarama yok.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-50">
-                    {recentReports.slice(0, 5).map((report) => (
-                      <div 
-                        key={report.id} 
-                        className="p-4 hover:bg-gray-50 transition flex items-center justify-between group"
-                      >
-                        <div onClick={() => {
-                          const student = students.find(s => s.id === report.studentId);
-                          if(student) onViewReport(report, student);
-                        }} className="cursor-pointer flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-bold text-gray-700 text-sm">{report.studentName}</span>
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(report.date).toLocaleDateString('tr-TR')}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${getRiskColor(report.totalScore)}`}>
-                              %{report.totalScore} Risk Skoru
-                            </span>
-                          </div>
+            {/* 2. ROW: Main Bento Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+               
+               {/* Quick Actions (3 cols) */}
+               <div className="lg:col-span-3 space-y-4">
+                  <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] px-2">Hızlı Aksiyonlar</h4>
+                  <button onClick={openAddModal} className="w-full bg-white p-5 rounded-3xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group flex items-center justify-between">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                           <Plus className="w-5 h-5" />
                         </div>
-
-                        {/* ÖĞRETMEN İÇİN PLAN OLUŞTURMA BUTONU */}
-                        {user.role === 'teacher' && (
-                           <button 
-                             onClick={() => handleCreateEducationPlan(report)}
-                             className="text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 hover:scale-105 active:scale-95 border border-purple-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition shadow-sm ml-2"
-                             title="Bireyselleştirilmiş Eğitim Planı Oluştur"
-                           >
-                              <Sparkles className="w-3 h-3" /> BEP Oluştur
-                           </button>
-                        )}
-                        
-                        {user.role !== 'teacher' && (
-                             <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 cursor-pointer" onClick={() => {
-                                const student = students.find(s => s.id === report.studentId);
-                                if(student) onViewReport(report, student);
-                              }}/>
-                        )}
-
-                      </div>
-                    ))}
+                        <span className="font-bold text-gray-700">Yeni Öğrenci</span>
+                     </div>
+                     <ChevronRight className="w-4 h-4 text-gray-300" />
+                  </button>
+                  <button onClick={() => setActiveTab('messages')} className="w-full bg-white p-5 rounded-3xl border border-gray-200 shadow-sm hover:shadow-md hover:border-purple-200 transition-all group flex items-center justify-between">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-50 text-purple-600 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                           <Mail className="w-5 h-5" />
+                        </div>
+                        <span className="font-bold text-gray-700">Mesaj Gönder</span>
+                     </div>
+                     <ChevronRight className="w-4 h-4 text-gray-300" />
+                  </button>
+                  <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-3xl border border-indigo-100/50">
+                     <h5 className="text-xs font-black text-indigo-900 mb-2 uppercase tracking-widest">Sistem Notu</h5>
+                     <p className="text-xs text-indigo-600 leading-relaxed font-medium">Tarama sonuçları otomatik olarak en son bilimsel eşik değerlerine göre güncellenmektedir.</p>
                   </div>
-                )}
-              </div>
+               </div>
+
+               {/* Recent Activity List (6 cols) */}
+               <div className="lg:col-span-6 bg-white rounded-[2rem] border border-gray-200 shadow-sm flex flex-col min-w-0">
+                  <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                     <h3 className="font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
+                        <Target className="w-4 h-4 text-indigo-600" /> Son Aktiviteler
+                     </h3>
+                     <button onClick={() => setActiveTab('archive')} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline">Tümünü Gör</button>
+                  </div>
+                  <div className="p-2 flex-1 overflow-y-auto max-h-[400px]">
+                     {recentReports.length === 0 ? (
+                        <div className="py-12 text-center text-gray-400 text-sm italic">Henüz bir kayıt bulunmuyor.</div>
+                     ) : (
+                        recentReports.slice(0, 6).map((report, idx) => (
+                           <div key={report.id} className="group p-4 rounded-2xl hover:bg-gray-50 transition-all flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-4">
+                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${
+                                   report.totalScore >= 65 ? 'bg-red-50 text-red-600' :
+                                   report.totalScore >= 35 ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'
+                                 }`}>
+                                    {report.totalScore}
+                                 </div>
+                                 <div>
+                                    <h5 className="font-bold text-gray-900 text-sm">{report.studentName}</h5>
+                                    <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">
+                                       {new Date(report.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })}
+                                    </p>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 {user.role === 'teacher' && (
+                                    <button 
+                                      onClick={() => handleCreateEducationPlan(report)}
+                                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                      title="BEP Oluştur"
+                                    >
+                                       <Sparkles className="w-4 h-4" />
+                                    </button>
+                                 )}
+                                 <button 
+                                   onClick={() => handleArchiveReportView(report)}
+                                   className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                 >
+                                    <ChevronRight className="w-4 h-4" />
+                                 </button>
+                              </div>
+                           </div>
+                        ))
+                     )}
+                  </div>
+               </div>
+
+               {/* Right Sidebar Bento (3 cols) */}
+               <div className="lg:col-span-3 space-y-4">
+                  <div className="bg-white p-6 rounded-[2rem] border border-gray-200 shadow-sm">
+                     <div className="flex items-center gap-2 mb-4">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest">Canlı Destek</h4>
+                     </div>
+                     <p className="text-sm font-bold text-gray-800 mb-2">Uzman Yanında</p>
+                     <p className="text-xs text-gray-500 leading-relaxed mb-4">Kritik vakalar için bir uzman ile anında randevu oluşturabilirsiniz.</p>
+                     <button className="w-full py-3 border-2 border-indigo-600 text-indigo-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all active:scale-95">
+                        RANDEVU AL
+                     </button>
+                  </div>
+                  
+                  <div className="bg-indigo-900 p-6 rounded-[2rem] text-white shadow-xl relative overflow-hidden group">
+                     <h4 className="text-xl font-black mb-2 relative z-10">Premium<br/>Erişim</h4>
+                     <p className="text-xs text-indigo-300 mb-4 relative z-10">Tüm kategorilerde sınırsız tarama ve detaylı PDF çıktıları.</p>
+                     <div className="absolute -bottom-4 -right-4 bg-white/10 w-24 h-24 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                     <ArrowUpRight className="absolute top-4 right-4 w-5 h-5 text-indigo-400" />
+                  </div>
+               </div>
+
             </div>
           </div>
-        </div>
         )}
       </main>
 
-      {/* Add/Edit Student Modal */}
+      {/* Add Student Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">
-              {editingStudentId ? 'Öğrenci Bilgilerini Düzenle' : (user.role === 'parent' ? 'Yeni Çocuk Ekle' : 'Yeni Öğrenci Ekle')}
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 animate-fade-in border border-gray-100">
+            <h3 className="text-2xl font-black text-gray-900 mb-6 tracking-tight">
+              {editingStudentId ? 'Bilgileri Güncelle' : 'Yeni Kayıt Oluştur'}
             </h3>
-            <form onSubmit={handleSaveStudent} className="space-y-4">
+            <form onSubmit={handleSaveStudent} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={studentFormData.name}
-                  onChange={e => setStudentFormData({...studentFormData, name: e.target.value})}
-                />
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Tam Adı</label>
+                <input type="text" required className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium" value={studentFormData.name} onChange={e => setStudentFormData({...studentFormData, name: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Yaş</label>
-                  <input
-                    type="number"
-                    required
-                    min="4"
-                    max="18"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={studentFormData.age}
-                    onChange={e => setStudentFormData({...studentFormData, age: e.target.value})}
-                  />
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Yaşı</label>
+                  <input type="number" required min="4" max="18" className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium" value={studentFormData.age} onChange={e => setStudentFormData({...studentFormData, age: e.target.value})} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sınıf</label>
-                  <select
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                    value={studentFormData.grade}
-                    onChange={e => setStudentFormData({...studentFormData, grade: e.target.value})}
-                  >
-                    <option value="">Seçiniz</option>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Sınıfı</label>
+                  <select required className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium appearance-none" value={studentFormData.grade} onChange={e => setStudentFormData({...studentFormData, grade: e.target.value})}>
+                    <option value="">Seç...</option>
                     <option value="okul_oncesi">Okul Öncesi</option>
                     <option value="1">1. Sınıf</option>
                     <option value="2">2. Sınıf</option>
@@ -698,117 +535,54 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onStartScreening,
                   </select>
                 </div>
               </div>
-              
-               <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Özel Notlar</label>
-                  <textarea
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                    placeholder="Varsa özel durumları belirtin..."
-                    value={studentFormData.notes}
-                    onChange={e => setStudentFormData({...studentFormData, notes: e.target.value})}
-                  />
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Notlar</label>
+                <textarea rows={3} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium resize-none" placeholder="Eklemek istediğiniz kısa bilgiler..." value={studentFormData.notes} onChange={e => setStudentFormData({...studentFormData, notes: e.target.value})} />
               </div>
-
-              <div className="flex gap-3 pt-4">
-                <button 
-                  type="button" 
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-3 text-gray-600 font-medium hover:bg-gray-50 rounded-xl transition"
-                >
-                  İptal
-                </button>
-                <button 
-                  type="submit" 
-                  className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200"
-                >
-                  {editingStudentId ? 'Güncelle' : 'Kaydet'}
-                </button>
+              <div className="flex gap-4 pt-4">
+                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-4 text-gray-500 font-bold hover:bg-gray-100 rounded-2xl transition-all">Vazgeç</button>
+                <button type="submit" className="flex-1 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95">Tamamla</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Invite Parent Modal */}
-      {showInviteModal && inviteTargetStudent && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in relative">
-              <button onClick={() => setShowInviteModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-                <span className="text-xl">×</span>
-              </button>
-              
-              <div className="text-center mb-6">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                   <UserPlus className="w-6 h-6 text-green-600" />
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 animate-fade-in relative overflow-hidden">
+              <div className="relative z-10">
+                <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-6">
+                   <UserPlus className="w-7 h-7 text-green-600" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900">Veli Davet Et</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  <strong>{inviteTargetStudent.name}</strong> için veliyi sisteme davet edin.
-                </p>
-              </div>
+                <h3 className="text-2xl font-black text-gray-900 mb-2">Veli Daveti</h3>
+                <p className="text-sm text-gray-500 mb-8 leading-relaxed">Sisteme davet ederek velinin de kendi gözlemlerini girmesini sağlayın.</p>
 
-              {!generatedLink ? (
-                <form onSubmit={handleInviteParent} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Veli E-posta Adresi</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="ornek@veli.com"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
-                      value={inviteEmail}
-                      onChange={e => setInviteEmail(e.target.value)}
-                    />
+                {!generatedLink ? (
+                  <form onSubmit={handleInviteParent} className="space-y-4">
+                    <input type="email" required placeholder="Veli E-posta Adresi" className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-500/10 focus:border-green-500 outline-none transition-all font-medium" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                    <button type="submit" disabled={inviteLoading} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl transition-all shadow-xl shadow-green-100 flex items-center justify-center gap-2">
+                      {inviteLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <LinkIcon className="w-5 h-5" />} Bağlantı Oluştur
+                    </button>
+                  </form>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="p-5 bg-green-50 rounded-2xl border border-green-100 flex items-center gap-3">
+                       <input readOnly value={generatedLink} className="flex-1 bg-transparent text-sm font-bold text-green-800 outline-none truncate" />
+                       <button onClick={handleCopyLink} className="p-2.5 bg-white rounded-xl shadow-sm hover:scale-110 transition-transform">
+                          {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-gray-400" />}
+                       </button>
+                    </div>
+                    <button onClick={() => setShowInviteModal(false)} className="w-full py-4 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-all">Pencereyi Kapat</button>
                   </div>
-                  <button 
-                    type="submit" 
-                    disabled={inviteLoading}
-                    className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition shadow-lg shadow-green-200 flex items-center justify-center gap-2"
-                  >
-                    {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <LinkIcon className="w-4 h-4" />}
-                    Davet Linki Oluştur
-                  </button>
-                </form>
-              ) : (
-                <div className="space-y-4">
-                   <div className="bg-green-50 p-4 rounded-xl border border-green-100 text-center">
-                      <p className="text-green-800 font-medium mb-2">Davet Linki Hazır! 🎉</p>
-                      <div className="flex items-center gap-2 bg-white border border-green-200 rounded-lg p-2">
-                         <input 
-                           readOnly 
-                           value={generatedLink} 
-                           className="flex-1 text-xs text-gray-600 outline-none bg-transparent"
-                         />
-                         <button 
-                           onClick={handleCopyLink}
-                           className="p-2 hover:bg-gray-100 rounded-md transition text-gray-500"
-                           title="Kopyala"
-                         >
-                           {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                         </button>
-                      </div>
-                      <p className="text-xs text-green-600 mt-2">Bu linki kopyalayıp veliye gönderin.</p>
-                   </div>
-                   <button 
-                     onClick={() => setShowInviteModal(false)}
-                     className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
-                   >
-                     Tamamla
-                   </button>
-                </div>
-              )}
+                )}
+              </div>
            </div>
         </div>
       )}
     </div>
   );
 };
-
-const BrainPattern = () => (
-  <svg width="400" height="400" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-    <path fill="#FFFFFF" d="M44.7,-76.4C58.9,-69.2,71.8,-59.1,81.6,-46.6C91.4,-34.1,98.1,-19.2,95.8,-5.3C93.5,8.6,82.2,21.4,70.9,32.4C59.6,43.4,48.3,52.6,36.2,60.8C24.1,69,11.2,76.3,-2.6,80.8C-16.4,85.3,-31.1,87,-44.1,80.1C-57.1,73.2,-68.4,57.7,-76.3,41.4C-84.2,25.1,-88.7,8,-85.8,-7.8C-82.9,-23.6,-72.6,-38.1,-60.8,-49.2C-49,-60.3,-35.7,-68,-22.1,-75.6C-8.5,-83.2,5.4,-90.7,19.9,-91.8C34.4,-92.9,49.5,-87.6,44.7,-76.4Z" transform="translate(100 100)" />
-  </svg>
-);
 
 export default Dashboard;

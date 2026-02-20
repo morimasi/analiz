@@ -58,6 +58,13 @@ export interface ScreeningResult {
   completedBy: Role;
 }
 
+export interface DashboardInsight {
+  title: string;
+  content: string;
+  priority: 'low' | 'medium' | 'high';
+  actionLabel?: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -69,7 +76,7 @@ export interface Message {
   senderName?: string; // UI için joinlenmiş veri
 }
 
-// --- EĞİTİM PLANI (BEP) TİPLERİ - GÜNCELLENDİ ---
+// --- EĞİTİM PLANI (BEP) TİPLERİ ---
 
 export interface DailyPlan {
   day: string;          // "Pazartesi", "Salı"...
